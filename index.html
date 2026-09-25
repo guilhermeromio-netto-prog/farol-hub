@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Farol — hub de viagem</title>
+  <meta name="description" content="Farol: hub de viagem personalizado com clima, câmbio, feriados, notícias e um planejador de roteiros. Feito por byGui.">
+  <meta name="theme-color" content="#070B14">
+  <meta name="color-scheme" content="dark">
+  <meta name="view-transition" content="same-origin">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23070B14'/%3E%3Cpath d='M13 27h6l-1.2-15h-3.6z' fill='%236EA8FF'/%3E%3Cpath d='M12.5 11h7l-1-3h-5z' fill='%23E8EBF2'/%3E%3Cpath d='M20 9l7-3v6z' fill='%238B86B8' opacity='.8'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/estilo.css">
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
+
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+    <symbol id="i-farol" viewBox="0 0 32 32"><path d="M13 28h6l-1.3-16h-3.4z" fill="currentColor"/><path d="M12 11h8l-1.2-3.5h-5.6z" fill="currentColor" opacity=".75"/><path d="M16 3.5l2.4 3.5h-4.8z" fill="currentColor"/><path d="M20.5 8.5l8-3.5v8z" fill="currentColor" opacity=".35"/><rect x="10" y="27" width="12" height="2" rx="1" fill="currentColor"/></symbol>
+    <symbol id="i-inicio" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+    <symbol id="i-planejar" viewBox="0 0 24 24"><path d="M9 4 3 6.5v13.5l6-2.5 6 2.5 6-2.5V4l-6 2.5z M9 4v13.5 M15 6.5V20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+    <symbol id="i-precos" viewBox="0 0 24 24"><path d="M3 12V4h8l10 10-8 8z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="7.5" cy="8.5" r="1.5" fill="currentColor"/></symbol>
+    <symbol id="i-cadernos" viewBox="0 0 24 24"><path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+    <symbol id="i-noticias" viewBox="0 0 24 24"><path d="M4 5h13v14H6a2 2 0 0 1-2-2zM17 9h3v8a2 2 0 0 1-2 2h-1M7.5 9h6M7.5 12.5h6M7.5 16h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-busca" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="m16 16 4.5 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="i-sol" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.2" fill="currentColor"/><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+    <symbol id="i-nuvem" viewBox="0 0 24 24"><path d="M7 18.5h10.5a4 4 0 0 0 .4-8 5.5 5.5 0 0 0-10.6 1.2A3.4 3.4 0 0 0 7 18.5z" fill="currentColor"/></symbol>
+    <symbol id="i-sol-nuvem" viewBox="0 0 24 24"><circle cx="8" cy="8" r="3.4" fill="currentColor" opacity=".8"/><path d="M8.5 20h9a3.5 3.5 0 0 0 .3-7 4.8 4.8 0 0 0-9.2 1A3 3 0 0 0 8.5 20z" fill="currentColor"/></symbol>
+    <symbol id="i-chuva" viewBox="0 0 24 24"><path d="M7 14.5h10.5a3.8 3.8 0 0 0 .4-7.6A5.3 5.3 0 0 0 7.6 8 3.3 3.3 0 0 0 7 14.5z" fill="currentColor"/><path d="M8.5 17.5 7.5 20M12.5 17.5l-1 2.5M16.5 17.5l-1 2.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+    <symbol id="i-tempestade" viewBox="0 0 24 24"><path d="M7 14h10.5a3.8 3.8 0 0 0 .4-7.6A5.3 5.3 0 0 0 7.6 7.5 3.3 3.3 0 0 0 7 14z" fill="currentColor"/><path d="m12.5 14.5-2.5 4h3l-1.5 3.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-neve" viewBox="0 0 24 24"><path d="M7 14h10.5a3.8 3.8 0 0 0 .4-7.6A5.3 5.3 0 0 0 7.6 7.5 3.3 3.3 0 0 0 7 14z" fill="currentColor"/><circle cx="8.5" cy="18" r="1.1" fill="currentColor"/><circle cx="12" cy="20" r="1.1" fill="currentColor"/><circle cx="15.5" cy="18" r="1.1" fill="currentColor"/></symbol>
+    <symbol id="i-nevoa" viewBox="0 0 24 24"><path d="M4 9h16M6 13h12M4 17h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+    <symbol id="i-seta" viewBox="0 0 24 24"><path d="M5 12h14m-6-6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-voltar" viewBox="0 0 24 24"><path d="M19 12H5m6 6-6-6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-lixo" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6.5 7l1 13h9l1-13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-externo" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-carro" viewBox="0 0 24 24"><path d="M4 16v-4l2-5h12l2 5v4zM4 16v2.5M20 16v2.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="7.5" cy="13" r="1.2" fill="currentColor"/><circle cx="16.5" cy="13" r="1.2" fill="currentColor"/></symbol>
+    <symbol id="i-aviao" viewBox="0 0 24 24"><path d="M21 15.5 13.5 11V5a1.5 1.5 0 0 0-3 0v6L3 15.5v2l7.5-2.2V19l-2 1.5V22l3.5-1 3.5 1v-1.5l-2-1.5v-3.7l7.5 2.2z" fill="currentColor"/></symbol>
+    <symbol id="i-motorhome" viewBox="0 0 24 24"><path d="M2.5 17V7a1 1 0 0 1 1-1H15l4.5 5H21.5v6zM15 6v5h4.5M5.5 9h6v3h-6z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><circle cx="7" cy="17.5" r="1.8" fill="currentColor"/><circle cx="17" cy="17.5" r="1.8" fill="currentColor"/></symbol>
+  </svg>
+
+  <header class="topo" role="banner">
+    <div class="topo__inner">
+      <a class="marca" href="#/" aria-label="Farol — página inicial">
+        <svg class="marca__icone" aria-hidden="true"><use href="#i-farol"/></svg>
+        <span class="marca__nome">Farol</span>
+      </a>
+      <nav class="nav-desk" aria-label="Navegação principal">
+        <a href="#/" data-nav="inicio">Início</a>
+        <a href="#/planejar" data-nav="planejar">Planejar</a>
+        <a href="#/precos" data-nav="precos">Preços</a>
+        <a href="#/cadernos" data-nav="cadernos">Cadernos</a>
+        <a href="#/noticias" data-nav="noticias">Notícias</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="conteudo" class="conteudo" tabindex="-1">
+    <div id="vista" class="vista" aria-live="polite" aria-busy="true">
+      <div class="shell">
+        <div class="sk sk--titulo"></div>
+        <div class="sk sk--linha"></div>
+        <div class="sk sk--bloco"></div>
+      </div>
+      <noscript><p class="shell">O Farol precisa de JavaScript ativado para funcionar.</p></noscript>
+    </div>
+  </main>
+
+  <footer class="rodape" role="contentinfo">
+    <div class="rodape__inner">
+      <p class="assinatura">Feito por <strong>byGui</strong></p>
+      <p class="rodape__nota">Dados ao vivo de fontes públicas. Custos são estimativas, não cotações.</p>
+    </div>
+  </footer>
+
+  <nav class="nav-mob" aria-label="Navegação principal (celular)">
+    <a href="#/" data-nav="inicio"><svg aria-hidden="true"><use href="#i-inicio"/></svg><span>Início</span></a>
+    <a href="#/planejar" data-nav="planejar"><svg aria-hidden="true"><use href="#i-planejar"/></svg><span>Planejar</span></a>
+    <a href="#/precos" data-nav="precos"><svg aria-hidden="true"><use href="#i-precos"/></svg><span>Preços</span></a>
+    <a href="#/cadernos" data-nav="cadernos"><svg aria-hidden="true"><use href="#i-cadernos"/></svg><span>Cadernos</span></a>
+    <a href="#/noticias" data-nav="noticias"><svg aria-hidden="true"><use href="#i-noticias"/></svg><span>Notícias</span></a>
+  </nav>
+
+  <div class="toasts" id="toasts" role="status" aria-live="polite" aria-atomic="false"></div>
+
+  <dialog class="dialogo" id="dialogo" aria-labelledby="dialogo-titulo" aria-describedby="dialogo-texto">
+    <form method="dialog">
+      <h2 id="dialogo-titulo" class="dialogo__titulo">Confirmar</h2>
+      <p id="dialogo-texto" class="dialogo__texto"></p>
+      <div class="dialogo__acoes">
+        <button class="btn btn--fantasma" value="cancelar" type="submit">Cancelar</button>
+        <button class="btn btn--perigo" value="ok" type="submit" id="dialogo-ok">Apagar</button>
+      </div>
+    </form>
+  </dialog>
+</body>
+</html>
