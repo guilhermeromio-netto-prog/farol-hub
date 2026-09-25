@@ -6,12 +6,13 @@
   <title>Farol — hub de viagem</title>
   <meta name="description" content="Farol: hub de viagem personalizado com clima, câmbio, feriados, notícias e um planejador de roteiros. Feito por byGui.">
   <meta name="theme-color" content="#070B14">
-  <meta name="color-scheme" content="dark">
+  <meta name="color-scheme" content="dark light">
   <meta name="view-transition" content="same-origin">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23070B14'/%3E%3Cpath d='M13 27h6l-1.2-15h-3.6z' fill='%236EA8FF'/%3E%3Cpath d='M12.5 11h7l-1-3h-5z' fill='%23E8EBF2'/%3E%3Cpath d='M20 9l7-3v6z' fill='%238B86B8' opacity='.8'/%3E%3C/svg%3E">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap" rel="stylesheet">
+  <script>try{if(localStorage.getItem('farol:tema')==='claro'){document.documentElement.dataset.tema='claro';document.querySelector('meta[name="theme-color"]').content='#F4F6FB';}}catch(e){}</script>
+  <link rel="preload" href="fonts/manrope-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preconnect" href="https://api.open-meteo.com" crossorigin>
+  <link rel="preconnect" href="https://pt.wikipedia.org" crossorigin>
   <link rel="stylesheet" href="css/estilo.css">
   <script type="module" src="js/app.js"></script>
 </head>
@@ -40,6 +41,15 @@
     <symbol id="i-carro" viewBox="0 0 24 24"><path d="M4 16v-4l2-5h12l2 5v4zM4 16v2.5M20 16v2.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="7.5" cy="13" r="1.2" fill="currentColor"/><circle cx="16.5" cy="13" r="1.2" fill="currentColor"/></symbol>
     <symbol id="i-aviao" viewBox="0 0 24 24"><path d="M21 15.5 13.5 11V5a1.5 1.5 0 0 0-3 0v6L3 15.5v2l7.5-2.2V19l-2 1.5V22l3.5-1 3.5 1v-1.5l-2-1.5v-3.7l7.5 2.2z" fill="currentColor"/></symbol>
     <symbol id="i-motorhome" viewBox="0 0 24 24"><path d="M2.5 17V7a1 1 0 0 1 1-1H15l4.5 5H21.5v6zM15 6v5h4.5M5.5 9h6v3h-6z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><circle cx="7" cy="17.5" r="1.8" fill="currentColor"/><circle cx="17" cy="17.5" r="1.8" fill="currentColor"/></symbol>
+    <symbol id="i-gastos" viewBox="0 0 24 24"><path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H18v3M4 7.5V18a2 2 0 0 0 2 2h13a1 1 0 0 0 1-1v-3M4 7.5A2.5 2.5 0 0 0 6.5 10H19a1 1 0 0 1 1 1v2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M16 13h5v3h-5a1.5 1.5 0 0 1 0-3z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+    <symbol id="i-mais" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.9" fill="currentColor"/><circle cx="12" cy="12" r="1.9" fill="currentColor"/><circle cx="19" cy="12" r="1.9" fill="currentColor"/></symbol>
+    <symbol id="i-status" viewBox="0 0 24 24"><path d="M3 12h4l2.5-6 5 12 2.5-6h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-lua" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+    <symbol id="i-whats" viewBox="0 0 24 24"><path d="M4 20l1.2-3.8A8 8 0 1 1 8 19z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M9 9.2c0 3 2.6 5.8 5.8 5.8l1.2-1.4-1.8-1-1 .8a4 4 0 0 1-2.4-2.4l.8-1-1-1.8z" fill="currentColor"/></symbol>
+    <symbol id="i-compartilhar" viewBox="0 0 24 24"><circle cx="6" cy="12" r="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="17.5" cy="6" r="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="17.5" cy="18" r="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m8.2 10.8 7-3.6M8.2 13.2l7 3.6" stroke="currentColor" stroke-width="1.8"/></symbol>
+    <symbol id="i-baixar" viewBox="0 0 24 24"><path d="M12 4v11m-5-5 5 5 5-5M5 20h14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-subir" viewBox="0 0 24 24"><path d="M12 16V5m-5 5 5-5 5 5M5 20h14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-6.5-6.2-6.5-11.2a6.5 6.5 0 0 1 13 0C18.5 14.8 12 21 12 21z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12" cy="9.8" r="2.3" fill="currentColor"/></symbol>
   </svg>
 
   <header class="topo" role="banner">
@@ -48,18 +58,23 @@
         <svg class="marca__icone" aria-hidden="true"><use href="#i-farol"/></svg>
         <span class="marca__nome">Farol</span>
       </a>
-      <nav class="nav-desk" aria-label="Navegação principal">
-        <a href="#/" data-nav="inicio">Início</a>
-        <a href="#/planejar" data-nav="planejar">Planejar</a>
-        <a href="#/precos" data-nav="precos">Preços</a>
-        <a href="#/cadernos" data-nav="cadernos">Cadernos</a>
-        <a href="#/noticias" data-nav="noticias">Notícias</a>
-      </nav>
+      <div class="topo__acoes">
+        <nav class="nav-desk" aria-label="Navegação principal">
+          <a href="#/" data-nav="inicio">Início</a>
+          <a href="#/planejar" data-nav="planejar">Planejar</a>
+          <a href="#/precos" data-nav="precos">Preços</a>
+          <a href="#/gastos" data-nav="gastos">Gastos</a>
+          <a href="#/cadernos" data-nav="cadernos">Cadernos</a>
+          <a href="#/noticias" data-nav="noticias">Notícias</a>
+          <a href="#/status" data-nav="status">Status</a>
+        </nav>
+        <button type="button" class="btn-tema" id="btn-tema" aria-pressed="false" aria-label="Usar tema claro"><svg aria-hidden="true"><use href="#i-sol"/></svg></button>
+      </div>
     </div>
   </header>
 
   <main id="conteudo" class="conteudo" tabindex="-1">
-    <div id="vista" class="vista" aria-live="polite" aria-busy="true">
+    <div id="vista" class="vista" aria-busy="true">
       <div class="shell">
         <div class="sk sk--titulo"></div>
         <div class="sk sk--linha"></div>
@@ -72,17 +87,22 @@
   <footer class="rodape" role="contentinfo">
     <div class="rodape__inner">
       <p class="assinatura">Feito por <strong>byGui</strong></p>
-      <p class="rodape__nota">Dados ao vivo de fontes públicas. Custos são estimativas, não cotações.</p>
+      <p class="rodape__nota">Dados ao vivo de fontes públicas. Custos são estimativas, não cotações. <a href="#/status">Status e fontes</a></p>
     </div>
   </footer>
 
   <nav class="nav-mob" aria-label="Navegação principal (celular)">
     <a href="#/" data-nav="inicio"><svg aria-hidden="true"><use href="#i-inicio"/></svg><span>Início</span></a>
     <a href="#/planejar" data-nav="planejar"><svg aria-hidden="true"><use href="#i-planejar"/></svg><span>Planejar</span></a>
-    <a href="#/precos" data-nav="precos"><svg aria-hidden="true"><use href="#i-precos"/></svg><span>Preços</span></a>
+    <a href="#/gastos" data-nav="gastos"><svg aria-hidden="true"><use href="#i-gastos"/></svg><span>Gastos</span></a>
     <a href="#/cadernos" data-nav="cadernos"><svg aria-hidden="true"><use href="#i-cadernos"/></svg><span>Cadernos</span></a>
-    <a href="#/noticias" data-nav="noticias"><svg aria-hidden="true"><use href="#i-noticias"/></svg><span>Notícias</span></a>
+    <button type="button" id="btn-mais" aria-expanded="false" aria-controls="menu-mais"><svg aria-hidden="true"><use href="#i-mais"/></svg><span>Mais</span></button>
   </nav>
+  <div class="menu-mais" id="menu-mais" hidden>
+    <a href="#/precos" data-nav="precos"><svg aria-hidden="true"><use href="#i-precos"/></svg>Preços e links de busca</a>
+    <a href="#/noticias" data-nav="noticias"><svg aria-hidden="true"><use href="#i-noticias"/></svg>Notícias de viagem</a>
+    <a href="#/status" data-nav="status"><svg aria-hidden="true"><use href="#i-status"/></svg>Status e fontes</a>
+  </div>
 
   <div class="toasts" id="toasts" role="status" aria-live="polite" aria-atomic="false"></div>
 

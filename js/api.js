@@ -30,14 +30,17 @@ function gravarCache(url, d, ttl) {
 }
 
 /**
- * Busca JSON com cache e mensagens amigáveis.
+ * Busca JSON (ou texto) com cache e mensagens amigáveis.
  * @param {string} url
- * @param {{fonte?:string, ttl?:number, signal?:AbortSignal, timeout?:number, texto?:boolean}} op
+ * @param {{fonte?:string, ttl?:number, signal?:AbortSignal, timeout?:number, texto?:boolean, metodo?:string, corpo?:string, semCache?:boolean, chave?:string}} op
  */
 export async function buscar(url, op = {}) {
-  const { fonte = 'o serviço', ttl = TTL_PADRAO, signal, timeout = 15000, texto = false } = op;
-  const cache = lerCache(url);
-  if (cache !== null) return cache;
+  const { fonte = 'o serviço', ttl = TTL_PADRAO, signal, timeout = 15000, texto = false, metodo = 'GET', corpo = null, semCache = false } = op;
+  const chave = op.chave || url;
+  if (!semCache) {
+    const cache = lerCache(chave);
+    if (cache !== null) return cache;
+  }
 
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(new DOMException('timeout', 'TimeoutError')), timeout);
@@ -46,12 +49,15 @@ export async function buscar(url, op = {}) {
 
   let resp;
   try {
-    resp = await fetch(url, { signal: ctrl.signal, headers: texto ? {} : { Accept: 'application/json' } });
+    const init = { signal: ctrl.signal, method: metodo, headers: texto ? {} : { Accept: 'application/json' } };
+    if (corpo != null) { init.body = corpo; init.headers['Content-Type'] = 'application/x-www-form-urlencoded; charset=UTF-8'; }
+    if (semCache) init.cache = 'no-store';
+    resp = await fetch(url, init);
   } catch (e) {
     clearTimeout(timer);
     if (signal && signal.aborted) throw new ErroAPI('Operação cancelada.', { status: -1 });
     if (e && (e.name === 'TimeoutError' || (ctrl.signal.reason && ctrl.signal.reason.name === 'TimeoutError'))) {
-      throw new ErroAPI(`${fonte} demorou demais para responder. Tente de novo em instantes.`);
+      throw new ErroAPI(`${fonte} demorou demais para responder. Tente de novo em instantes.`, { status: -2 });
     }
     if (!navigator.onLine) throw new ErroAPI('Você parece estar sem internet. Confira a conexão e tente de novo.');
     throw new ErroAPI(`Não foi possível falar com ${fonte} agora. Tente de novo em instantes.`);
@@ -62,14 +68,38 @@ export async function buscar(url, op = {}) {
 
   if (resp.status === 204) throw new ErroAPI(`${fonte} não tem dados para este pedido.`, { status: 204, vazio: true });
   if (resp.status === 404) throw new ErroAPI(`${fonte} não encontrou informações para este pedido.`, { status: 404, vazio: true });
-  if (resp.status === 429) throw new ErroAPI(`${fonte} recebeu pedidos demais. Espere um minuto e tente de novo.`, { status: 429 });
-  if (!resp.ok) throw new ErroAPI(`${fonte} está com instabilidade no momento. Tente de novo mais tarde.`, { status: resp.status });
+  if (resp.status === 429) {
+    const ra = Number(resp.headers.get('Retry-After'));
+    const e = new ErroAPI(`${fonte} recebeu pedidos demais e pediu uma pausa${ra ? ` de cerca de ${ra < 90 ? ra + ' segundos' : Math.ceil(ra / 60) + ' minutos'}` : ''}. Tente de novo depois.`, { status: 429 });
+    e.retryAfter = ra || 60;
+    throw e;
+  }
+  if (!resp.ok) throw new ErroAPI(`${fonte} está com instabilidade no momento (erro ${resp.status}). Tente de novo mais tarde.`, { status: resp.status });
 
   let dados;
   try { dados = texto ? await resp.text() : await resp.json(); }
   catch { throw new ErroAPI(`${fonte} devolveu uma resposta que não conseguimos ler.`); }
-  gravarCache(url, dados, ttl);
+  if (!semCache) gravarCache(chave, dados, ttl);
   return dados;
+}
+
+/* Cache longo em localStorage (pontos turísticos, visualizações). */
+const PREF_LC = 'farol:lc:';
+export function lerCacheLocal(k) {
+  try {
+    const raw = localStorage.getItem(PREF_LC + k);
+    if (!raw) return null;
+    const { t, ttl, d } = JSON.parse(raw);
+    if (Date.now() - t > ttl) { localStorage.removeItem(PREF_LC + k); return null; }
+    return d;
+  } catch { return null; }
+}
+export function gravarCacheLocal(k, d, ttl) {
+  const v = JSON.stringify({ t: Date.now(), ttl, d });
+  try { localStorage.setItem(PREF_LC + k, v); }
+  catch {
+    try { Object.keys(localStorage).filter((x) => x.startsWith(PREF_LC)).forEach((x) => localStorage.removeItem(x)); localStorage.setItem(PREF_LC + k, v); } catch {}
+  }
 }
 
 export const msgErro = (e) => (e && e.mensagem) || 'Algo deu errado. Tente de novo.';
@@ -158,7 +188,8 @@ export async function proximosFeriados(cc, meses = 6, { signal } = {}) {
   const anos = [...new Set([hoje.getFullYear(), fim.getFullYear()])];
   const listas = await Promise.all(anos.map((a) => feriados(cc, a, { signal })));
   if (listas.every((l) => l === null)) return null;
-  const hojeIso = hoje.toISOString().slice(0, 10), fimIso = fim.toISOString().slice(0, 10);
+  const isoLocal = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const hojeIso = isoLocal(hoje), fimIso = isoLocal(fim);
   const vistos = new Set();
   return listas.flat().filter(Boolean)
     .filter((f) => f.date >= hojeIso && f.date <= fimIso && f.global !== false)
@@ -222,4 +253,138 @@ export async function todasNoticias(feeds, { signal } = {}) {
   const ts = (x) => { const t = Date.parse(x.data); return isNaN(t) ? 0 : t; };
   itens.sort((a, b) => ts(b) - ts(a));
   return { itens, falhas };
+}
+
+/* ---------------- Fotos da Wikipédia (lote, até 50 títulos) ---------------- */
+/** Devolve { tituloOriginal: {src, largura, altura, titulo} } para os títulos pedidos. */
+export async function fotosWiki(titulos, { tamanho = 480, signal } = {}) {
+  const lista = [...new Set(titulos.filter(Boolean))].slice(0, 50);
+  if (!lista.length) return {};
+  const u = 'https://pt.wikipedia.org/w/api.php?' + new URLSearchParams({
+    action: 'query', prop: 'pageimages', piprop: 'thumbnail', pithumbsize: String(tamanho), pilimit: '50',
+    titles: lista.join('|'), redirects: '1', format: 'json', formatversion: '2', origin: '*',
+  });
+  const d = await buscar(u, { fonte: 'A Wikipédia', ttl: 24 * 60 * 60 * 1000, signal });
+  const q = d.query || {};
+  const mapa = {};
+  const volta = {}; // título final → original
+  const norm = (t) => t.replace(/_/g, ' ');
+  lista.forEach((t) => { volta[norm(t)] = t; });
+  (q.normalized || []).forEach((n) => { if (volta[n.from] !== undefined || lista.includes(n.from)) volta[n.to] = volta[n.from] || n.from; });
+  (q.redirects || []).forEach((r) => { volta[r.to] = volta[r.from] || r.from; });
+  (q.pages || []).forEach((p) => {
+    if (!p.thumbnail) return;
+    const orig = volta[p.title] || p.title;
+    mapa[orig] = { src: p.thumbnail.source, largura: p.thumbnail.width, altura: p.thumbnail.height, titulo: p.title };
+  });
+  return mapa;
+}
+
+/* ---------------- Pontos turísticos (OpenStreetMap / Overpass) ---------------- */
+export const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
+
+function consultaOverpass(lat, lon, raio) {
+  const a = `(around:${raio},${lat},${lon})`;
+  const aN = `(around:${Math.round(raio * 1.6)},${lat},${lon})`;
+  return `[out:json][timeout:25];(
+nwr["tourism"~"^(attraction|museum|viewpoint|theme_park|zoo)$"]["name"]${a};
+nwr["historic"]["name"]["wikipedia"]${a};
+nwr["historic"~"^(monument|castle|ruins|archaeological_site|fort)$"]["name"]${a};
+nwr["natural"~"^(beach|waterfall|peak)$"]["name"]${aN};
+nwr["leisure"="park"]["name"]["wikidata"]${a};
+);out center tags qt 300;`;
+}
+
+/** Lista de pontos turísticos reais perto de (lat, lon). Tenta o servidor principal e, se falhar, o de reserva. */
+export async function pontosTuristicos(lat, lon, raio, { signal, onTentativa = () => {} } = {}) {
+  const la = Math.round(lat * 1000) / 1000, lo = Math.round(lon * 1000) / 1000;
+  const chave = `osm:${la},${lo},${raio}`;
+  const cache = lerCacheLocal(chave);
+  if (cache) return { ...cache, doCache: true };
+  const corpo = 'data=' + encodeURIComponent(consultaOverpass(la, lo, raio));
+  let ultimoErro = null;
+  for (let i = 0; i < OVERPASS.length; i++) {
+    onTentativa(i);
+    try {
+      const d = await buscar(OVERPASS[i], { fonte: i ? 'O servidor reserva do OpenStreetMap' : 'O OpenStreetMap (Overpass)', metodo: 'POST', corpo, semCache: true, timeout: 32000, signal });
+      if (!d || !Array.isArray(d.elements)) throw new ErroAPI('O OpenStreetMap devolveu uma resposta inesperada.');
+      if (d.remark && /timed out|runtime error/i.test(d.remark) && !d.elements.length) throw new ErroAPI('O OpenStreetMap não terminou a consulta a tempo.');
+      const r = { elementos: d.elements, servidor: i, quando: new Date().toISOString() };
+      gravarCacheLocal(chave, r, 7 * 24 * 60 * 60 * 1000);
+      return r;
+    } catch (e) {
+      if (e.status === -1) throw e;
+      ultimoErro = e;
+    }
+  }
+  throw new ErroAPI(`Os dois servidores do OpenStreetMap falharam (${msgErro(ultimoErro)}) Tente de novo em alguns minutos.`, { status: ultimoErro ? ultimoErro.status : 0 });
+}
+
+/* ---------------- Visualizações na Wikipédia (Wikimedia Pageviews) ---------------- */
+const isoDia = (d) => `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, '0')}${String(d.getUTCDate()).padStart(2, '0')}`;
+
+/** Visualizações diárias (usuários, todos os acessos) dos últimos 60 dias completos de um artigo. */
+export async function visualizacoes(titulo, { signal } = {}) {
+  const fim = new Date(); fim.setUTCDate(fim.getUTCDate() - 1);
+  const ini = new Date(fim); ini.setUTCDate(ini.getUTCDate() - 59);
+  const chave = `pv:${titulo}:${isoDia(fim)}`;
+  const cache = lerCacheLocal(chave);
+  if (cache) return cache;
+  const u = `https://wikimedia.org/api/rest_v1/metrics/pageviews/per-article/pt.wikipedia/all-access/user/${encodeURIComponent(titulo.replace(/ /g, '_'))}/daily/${isoDia(ini)}/${isoDia(fim)}`;
+  const d = await buscar(u, { fonte: 'A Wikimedia', semCache: true, timeout: 12000, signal });
+  const itens = (d.items || []).map((x) => x.views || 0);
+  gravarCacheLocal(chave, itens, 12 * 60 * 60 * 1000);
+  return itens;
+}
+
+/**
+ * Ranking "Em alta": crescimento dos últimos 30 dias contra os 30 anteriores.
+ * Busca em sequência, com pausa curta, e para ao receber 429 (devolve o que já tem).
+ */
+export async function emAlta(destaques, { signal, onProgresso = () => {} } = {}) {
+  const res = [];
+  let limitado = null, falhas = 0;
+  for (let i = 0; i < destaques.length; i++) {
+    const d = destaques[i];
+    try {
+      const v = await visualizacoes(d.wiki, { signal });
+      if (v.length >= 40) {
+        const meio = v.length - 30;
+        const ult = v.slice(meio).reduce((a, b) => a + b, 0);
+        const ant = v.slice(Math.max(0, meio - 30), meio).reduce((a, b) => a + b, 0);
+        res.push({ destaque: d, ultimos: ult, anteriores: ant, variacao: ant ? (ult - ant) / ant : 0 });
+      }
+    } catch (e) {
+      if (e.status === -1) throw e;
+      if (e.status === 429) { limitado = e; break; }
+      falhas++;
+    }
+    onProgresso(i + 1, destaques.length);
+    if (i < destaques.length - 1 && !lerCacheLocal(`pv:${destaques[i + 1].wiki}:${isoDia(new Date(Date.now() - 864e5))}`)) {
+      await new Promise((r) => setTimeout(r, 250));
+    }
+  }
+  res.sort((a, b) => b.variacao - a.variacao);
+  return { lista: res, limitado, falhas, total: destaques.length };
+}
+
+/* ---------------- GitHub Actions (verificação automática) ---------------- */
+export async function ultimaVerificacao({ signal } = {}) {
+  const u = 'https://api.github.com/repos/guilhermeromio-netto-prog/farol-hub/actions/workflows/checks.yml/runs?per_page=1';
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 12000);
+  if (signal) signal.addEventListener('abort', () => ctrl.abort(), { once: true });
+  let r;
+  try { r = await fetch(u, { signal: ctrl.signal, headers: { Accept: 'application/vnd.github+json' } }); }
+  catch { clearTimeout(t); if (signal && signal.aborted) throw new ErroAPI('Operação cancelada.', { status: -1 }); throw new ErroAPI('Não foi possível falar com o GitHub agora.'); }
+  clearTimeout(t);
+  const resta = r.headers.get('x-ratelimit-remaining');
+  if (r.status === 403 || r.status === 429) {
+    const reset = Number(r.headers.get('x-ratelimit-reset'));
+    const quando = reset ? new Date(reset * 1000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '';
+    throw new ErroAPI(`O GitHub limitou consultas sem login deste endereço${quando ? ` até ${quando}` : ''}. Veja direto na página do GitHub.`, { status: r.status });
+  }
+  if (!r.ok) throw new ErroAPI(`O GitHub respondeu com erro ${r.status}.`, { status: r.status });
+  const d = await r.json();
+  return { run: (d.workflow_runs || [])[0] || null, restante: resta };
 }

@@ -107,3 +107,37 @@ export function confirmar({ titulo, texto, ok = 'Apagar' }) {
 }
 
 export const prefereMenosMovimento = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ---------- abas acessíveis reutilizáveis ---------- */
+let _abasSeq = 0;
+/** abas: [[id, rotulo]]. Devolve {html, prefixo}. Painéis vazios para preencher depois. */
+export function abasHTML(abas, ativa, rotuloGrupo, cls = '') {
+  const p = 'ab' + (++_abasSeq);
+  const html = `<div class="abas ${cls}" role="tablist" aria-label="${esc(rotuloGrupo)}">${abas.map(([k, r]) => `<button type="button" class="aba" role="tab" id="${p}-t-${k}" data-aba="${k}" aria-controls="${p}-p-${k}" aria-selected="${k === ativa}" tabindex="${k === ativa ? 0 : -1}">${r}</button>`).join('')}</div>
+    ${abas.map(([k]) => `<section class="painel" role="tabpanel" id="${p}-p-${k}" data-painel="${k}" aria-labelledby="${p}-t-${k}" tabindex="0" ${k === ativa ? '' : 'hidden'}></section>`).join('')}`;
+  return { html, prefixo: p };
+}
+export function ligarAbas(raiz, onTroca = () => {}) {
+  const abas = [...raiz.querySelectorAll(':scope > .abas > [role="tab"]')];
+  const ativar = (btn, focar = true) => {
+    abas.forEach((b) => { const on = b === btn; b.setAttribute('aria-selected', on); b.tabIndex = on ? 0 : -1; const pn = raiz.querySelector('#' + b.getAttribute('aria-controls')); if (pn) pn.hidden = !on; });
+    if (focar) btn.focus();
+    onTroca(btn.dataset.aba);
+  };
+  abas.forEach((b, i) => {
+    b.addEventListener('click', () => ativar(b));
+    b.addEventListener('keydown', (ev) => {
+      let j = null;
+      if (ev.key === 'ArrowRight') j = (i + 1) % abas.length;
+      if (ev.key === 'ArrowLeft') j = (i - 1 + abas.length) % abas.length;
+      if (ev.key === 'Home') j = 0;
+      if (ev.key === 'End') j = abas.length - 1;
+      if (j !== null) { ev.preventDefault(); ativar(abas[j]); }
+    });
+  });
+  return { ativar: (k) => { const b = abas.find((x) => x.dataset.aba === k); if (b) ativar(b, false); } };
+}
+
+export const dataBR = (iso) => (iso ? new Date(iso + 'T12:00:00').toLocaleDateString('pt-BR') : '');
+export const reaisCentavos = (n) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(n) || 0);
+export const hojeISO = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };

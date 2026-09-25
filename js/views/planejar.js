@@ -1,8 +1,10 @@
 // Tela: Planejar (briefing → caderno) — Farol · byGui
-import { montarCaderno, briefPadrao, TRANSPORTES, ORCAMENTOS, RITMOS, DIAS, MESES_OPCOES, FRASES, transporteRotulo } from '../planner.js';
+import { briefPadrao, TRANSPORTES, ORCAMENTOS, RITMOS, DIAS, MESES_OPCOES, FRASES, transporteRotulo } from '../planner.js';
 import { esc, icone, toast } from '../ui.js';
 import { definirAtual, gravarBriefing, lerBriefing, limparAtual } from '../store.js';
 import { msgErro } from '../api.js';
+import { gerarRoteiro, ORIGEM_ROTEIRO } from '../gerador.js';
+import { decodificarBrief } from '../share.js';
 
 const MAX_TEXTO = 800;
 const HINTS = ['Chapada dos Veadeiros', 'Fernando de Noronha', 'Serra Gaúcha', 'Lençóis Maranhenses', 'El Calafate', 'Lisboa', 'San Pedro de Atacama', 'Jalapão', 'Paraty', 'Bonito'];
@@ -11,11 +13,21 @@ export function render(ctx) {
   const { el, dados, query, signal } = ctx;
   ctx.titulo('Planejar viagem');
   let b = { ...briefPadrao(), ...(lerBriefing() || {}) };
+  let autoGerar = false, codInvalido = false;
   if (query.get('novo') === '1') { limparAtual(); b = briefPadrao(); }
   if (query.get('destino')) {
     b.destination = query.get('destino').slice(0, 80);
     b.lat = query.get('lat') ? Number(query.get('lat')) : null;
     b.lon = query.get('lon') ? Number(query.get('lon')) : null;
+    if (!isFinite(b.lat) || !isFinite(b.lon)) { b.lat = null; b.lon = null; }
+  }
+  if (query.get('b')) {
+    const dec = decodificarBrief(query.get('b'), dados.interesses.map((i) => i.id));
+    if (dec) { b = { ...briefPadrao(), ...dec }; autoGerar = true; } else codInvalido = true;
+  }
+  // Parâmetros de uso único saem da barra de endereço (voltar/recarregar não repete a ação).
+  if (query.get('novo') || query.get('destino') || query.get('b')) {
+    try { history.replaceState(history.state, '', location.pathname + location.search + '#/planejar'); } catch {}
   }
 
   const radio = (name, id, rot, marcado, extra = '') => `<span><input class="chip-input" type="radio" name="${name}" id="${name}-${id}" value="${id}" ${marcado ? 'checked' : ''} ${extra}><label class="chip" for="${name}-${id}">${rot}</label></span>`;
@@ -25,7 +37,8 @@ export function render(ctx) {
     <section id="tela-form" aria-labelledby="t-plan">
       <p class="kicker">Caderno de bordo</p>
       <h1 id="t-plan">Monte o briefing.<br>O farol monta o resto.</h1>
-      <p class="lead">Destino, como você vai e o que quer viver. O Farol devolve três roteiros com clima real, custo estimado em reais, tempo de deslocamento e um checklist de partida.</p>
+      <p class="lead">Destino, como você vai e o que quer viver. O Farol devolve um roteiro sugerido em três opções, com clima real, custo estimado em reais, tempo de deslocamento e checklist de partida.</p>
+      <p class="faint">${esc(ORIGEM_ROTEIRO.explicacao)}</p>
 
       <form id="form-plan" class="form" novalidate style="margin-top:var(--sp-6)">
         <fieldset class="bloco">
@@ -183,7 +196,7 @@ export function render(ctx) {
     const meu = ctrl;
     signal.addEventListener('abort', () => { meu.abort(); clearInterval(timerFrase); }, { once: true });
     try {
-      const plan = await montarCaderno(brief, dados, { signal: meu.signal });
+      const plan = await gerarRoteiro(brief, dados, { signal: meu.signal });
       if (meu.signal.aborted) return;
       clearInterval(timerFrase);
       definirAtual(brief, plan);
@@ -195,4 +208,10 @@ export function render(ctx) {
       toast(e.mensagem ? msgErro(e) : 'Não deu para montar agora. Tente de novo.', 'erro', 6000);
     }
   });
+
+  if (codInvalido) toast('O link compartilhado está incompleto ou corrompido. Preencha o briefing abaixo.', 'erro', 6000);
+  if (autoGerar) {
+    toast('Roteiro compartilhado: gerando o mesmo caderno…', 'info', 3000);
+    form.requestSubmit();
+  }
 }

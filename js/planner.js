@@ -1,5 +1,5 @@
 // Planejador do Farol — gera o caderno no navegador, por regras + dados reais de clima.
-// Sem IA, sem servidor. Custos são estimativas a partir de dados.json. Feito por byGui.
+// Sem IA, sem servidor. Chamado apenas via js/gerador.js (fronteira para troca futura). Custos são estimativas a partir de dados.json. Feito por byGui.
 import { geocodificar, previsao, climaAnoPassado, feriados, ErroAPI } from './api.js';
 import { estatisticaMensal, melhoresMeses, malaParaClima, descreverEstacao, condicoesProximas } from './clima.js';
 import { MESES, reais, faixa, arred, uid, slugify, numero } from './ui.js';
@@ -47,7 +47,7 @@ async function resolverLugar(texto, dados, { signal, preferirBR = false } = {}) 
   const dest = dados.destaques.find((d) => { const n = norm(d.nome); return n === t || palavra(t, n) || (t.length >= 5 && palavra(n, t)); });
   if (dest) return { nome: dest.nome, lat: dest.lat, lon: dest.lon, cc: dest.pais, regiao: dest.local, destaque: dest };
   const ori = dados.origens.find((o) => norm(o.nome) === t);
-  if (ori) return { nome: ori.nome, lat: ori.lat, lon: ori.lon, cc: 'BR', regiao: '', iata: ori.iata };
+  if (ori) return { nome: ori.nome, lat: ori.lat, lon: ori.lon, cc: 'BR', regiao: ori.uf || '', uf: ori.uf || '', iata: ori.iata };
   const tentativas = [texto, texto.split(/,| - | e /i)[0]].map((x) => x.trim()).filter((x, i, a) => x.length >= 2 && a.indexOf(x) === i);
   for (const q of tentativas) {
     const r = await geocodificar(q, { count: 5, signal });
@@ -93,8 +93,8 @@ export async function montarCaderno(brief, dados, { signal, onEtapa = () => {} }
 
   let origemAssumida = false;
   let origem = brief.origin.trim() ? await resolverLugar(brief.origin, dados, { signal, preferirBR: true }).catch(() => null) : null;
-  if (!origem) { origemAssumida = true; const sp = dados.origens[0]; origem = { nome: sp.nome, lat: sp.lat, lon: sp.lon, cc: 'BR', iata: sp.iata }; }
-  if (!origem.iata) { const o = dados.origens.find((x) => norm(x.nome) === norm(origem.nome)); if (o) origem.iata = o.iata; }
+  if (!origem) { origemAssumida = true; const sp = dados.origens[0]; origem = { nome: sp.nome, lat: sp.lat, lon: sp.lon, cc: 'BR', iata: sp.iata, uf: sp.uf }; }
+  if (!origem.iata || !origem.uf) { const o = dados.origens.find((x) => norm(x.nome) === norm(origem.nome)); if (o) { origem.iata = origem.iata || o.iata; origem.uf = origem.uf || o.uf; } }
 
   const avisos = [];
   const infoPais = destino && destino.cc ? dados.paises[destino.cc] : null;
@@ -181,6 +181,8 @@ export async function montarCaderno(brief, dados, { signal, onEtapa = () => {} }
   const horasEstrada = kmEstrada != null && veic.velocidade ? kmEstrada / veic.velocidade : null;
   const nomeDest = destino ? destino.nome : brief.destination;
 
+  const internacionalP = destino && destino.cc && destino.cc !== 'BR';
+  const precoReg = dados.precos ? (dados.precos.regioes[regiaoId] || dados.precos.regioes.outros) : null;
   const opcoes = TIERS.map((tier, ti) => {
     const dias = [];
     const cursor = {};
@@ -258,32 +260,36 @@ export async function montarCaderno(brief, dados, { signal, onEtapa = () => {} }
     if (t === 'plane') {
       const [a, b] = custo.aereo;
       const faixaAereo = { economico: [a, (a + b) / 2], equilibrado: [a * 1.1, b], conforto: [b * 0.9, b * 1.5] }[tier.id];
-      L.push({ item: 'Passagens aéreas (ida e volta)', amountMin: faixaAereo[0] * brief.travelers, amountMax: faixaAereo[1] * brief.travelers, note: `Classe econômica, ${brief.travelers} pessoa(s), saindo do Brasil` });
+      L.push({ cat: 'passagem', item: 'Passagens aéreas (ida e volta)', amountMin: faixaAereo[0] * brief.travelers, amountMax: faixaAereo[1] * brief.travelers, note: `Classe econômica, ${brief.travelers} pessoa(s), saindo do Brasil` });
       const [ba, bb] = dados.veiculo.plane.bagagemTrecho;
-      if (tier.id !== 'economico') L.push({ item: 'Bagagem despachada', amountMin: ba * 2 * brief.travelers * (tier.id === 'conforto' ? 0 : 1), amountMax: bb * 2 * brief.travelers, note: tier.id === 'conforto' ? 'Muitas tarifas maiores já incluem a mala' : 'Uma mala por pessoa, ida e volta' });
+      if (tier.id !== 'economico') L.push({ cat: 'passagem', item: 'Bagagem despachada', amountMin: ba * 2 * brief.travelers * (tier.id === 'conforto' ? 0 : 1), amountMax: bb * 2 * brief.travelers, note: tier.id === 'conforto' ? 'Muitas tarifas maiores já incluem a mala' : 'Uma mala por pessoa, ida e volta' });
       const tl = custo.transporteLocal;
       const mult = { economico: 0.6, equilibrado: 1, conforto: 1.8 }[tier.id];
-      L.push({ item: 'Transporte no destino', amountMin: tl[0] * brief.days * mult, amountMax: tl[1] * brief.days * mult, note: tier.id === 'conforto' ? 'Transfers e carro alugado ou motorista' : 'Transporte público, aplicativo ou carro dividido' });
+      L.push({ cat: 'transporte', item: 'Transporte no destino', amountMin: tl[0] * brief.days * mult, amountMax: tl[1] * brief.days * mult, note: tier.id === 'conforto' ? 'Transfers e carro alugado ou motorista' : 'Transporte público, aplicativo ou carro dividido' });
     } else if (kmEstrada != null) {
       const kmTotal = kmEstrada * 2 + Math.max(0, brief.days - diasEstrada * 2) * 40;
-      L.push({ item: t === 'motorhome' ? 'Diesel, pedágio e desgaste' : 'Combustível e pedágio', amountMin: kmTotal * veic.custoKm[0], amountMax: kmTotal * veic.custoKm[1], note: `≈ ${numero(kmTotal)} km no total. ${veic.nota}` });
-      if (t === 'car') L.push({ item: 'Estacionamento', amountMin: 20 * brief.days, amountMax: 70 * brief.days, note: 'Hospedagem e atrações' });
+      L.push({ cat: 'transporte', item: t === 'motorhome' ? 'Diesel, pedágio e desgaste' : 'Combustível e pedágio', amountMin: kmTotal * veic.custoKm[0], amountMax: kmTotal * veic.custoKm[1], note: `≈ ${numero(kmTotal)} km no total. ${veic.nota}` });
+      if (t === 'car') L.push({ cat: 'transporte', item: 'Estacionamento', amountMin: 20 * brief.days, amountMax: 70 * brief.days, note: 'Hospedagem e atrações' });
     }
     if (t === 'motorhome') {
       const pn = veic.pernoite[tier.id];
-      L.push({ item: 'Campings e pernoites', amountMin: pn[0] * noites, amountMax: pn[1] * noites, note: 'Por veículo, com energia e água' });
+      L.push({ cat: 'hospedagem', item: 'Campings e pernoites', amountMin: pn[0] * noites, amountMax: pn[1] * noites, note: 'Por veículo, com energia e água' });
     } else {
       const h = custo.hospedagem[tier.id];
-      L.push({ item: 'Hospedagem', amountMin: h[0] * noites * quartos, amountMax: h[1] * noites * quartos, note: `${noites} noite(s), ${quartos} quarto(s) duplo(s)` });
+      L.push({ cat: 'hospedagem', item: 'Hospedagem', amountMin: h[0] * noites * quartos, amountMax: h[1] * noites * quartos, note: `${noites} noite(s), ${quartos} quarto(s) duplo(s)` });
     }
     const al = custo.alimentacao[tier.id];
     const alF = t === 'motorhome' ? 0.75 : 1;
-    L.push({ item: 'Alimentação', amountMin: al[0] * brief.days * brief.travelers * alF, amountMax: al[1] * brief.days * brief.travelers * alF, note: t === 'motorhome' ? 'Considera parte das refeições feitas no veículo' : 'Por pessoa, três refeições por dia' });
+    L.push({ cat: 'alimentacao', item: 'Alimentação', amountMin: al[0] * brief.days * brief.travelers * alF, amountMax: al[1] * brief.days * brief.travelers * alF, note: t === 'motorhome' ? 'Considera parte das refeições feitas no veículo' : 'Por pessoa, três refeições por dia' });
     const at = custo.atividades[tier.id];
     const diasAtiv = Math.max(1, brief.days - (t === 'plane' ? 1 : diasEstrada * 2)) * 0.8; // nem todo dia tem passeio pago
-    L.push({ item: 'Passeios e ingressos', amountMin: at[0] * diasAtiv * brief.travelers * paceF, amountMax: at[1] * diasAtiv * brief.travelers * paceF, note: `Ritmo ${ritmo.rotulo.toLowerCase()}` });
+    L.push({ cat: 'passeios', item: 'Passeios e ingressos', amountMin: at[0] * diasAtiv * brief.travelers * paceF, amountMax: at[1] * diasAtiv * brief.travelers * paceF, note: `Ritmo ${ritmo.rotulo.toLowerCase()}` });
+    if (internacionalP && precoReg) {
+      const sg = precoReg.seguro; const fx = { economico: sg.economico, equilibrado: [(sg.economico[0] + sg.medio[0]) / 2, (sg.economico[1] + sg.medio[1]) / 2], conforto: sg.medio }[tier.id];
+      L.push({ cat: 'seguro', item: 'Seguro viagem', amountMin: fx[0] * brief.days * brief.travelers, amountMax: fx[1] * brief.days * brief.travelers, note: 'Por pessoa por dia; alguns países exigem cobertura mínima' });
+    }
     const sub = L.reduce((s, x) => [s[0] + x.amountMin, s[1] + x.amountMax], [0, 0]);
-    L.push({ item: 'Reserva para imprevistos (10%)', amountMin: sub[0] * 0.1, amountMax: sub[1] * 0.1, note: 'Taxas locais, gorjetas, farmácia' });
+    L.push({ cat: 'outros', item: 'Reserva para imprevistos (10%)', amountMin: sub[0] * 0.1, amountMax: sub[1] * 0.1, note: 'Taxas locais, gorjetas, farmácia' });
     L.forEach((x) => { [x.amountMin, x.amountMax] = f([x.amountMin, x.amountMax]); });
     const totMin = L.reduce((s, x) => s + x.amountMin, 0), totMax = L.reduce((s, x) => s + x.amountMax, 0);
 
@@ -393,10 +399,12 @@ export async function montarCaderno(brief, dados, { signal, onEtapa = () => {} }
   return {
     id: uid(),
     title: titulo,
-    kicker: `Caderno de bordo · ${transporteRotulo(t)} · ${mesRotulo(brief.month)}`,
+    kicker: `Roteiro sugerido · ${transporteRotulo(t)} · ${mesRotulo(brief.month)}`,
     summary,
-    destino: destino ? { nome: destino.nome, lat: destino.lat, lon: destino.lon, cc: destino.cc || '', slug: destino.destaque ? destino.destaque.slug : '', iata: destino.destaque ? destino.destaque.iata : '' } : null,
-    origem: { nome: origem.nome, assumida: origemAssumida, iata: origem.iata || '' },
+    destino: destino ? { nome: destino.nome, lat: destino.lat, lon: destino.lon, cc: destino.cc || '', slug: destino.destaque ? destino.destaque.slug : '', iata: destino.destaque ? destino.destaque.iata : '', tipo: destino.destaque ? destino.destaque.tipo : '', civitatis: destino.destaque ? destino.destaque.civitatis || '' : '', wiki: destino.destaque ? destino.destaque.wiki : '' } : null,
+    origem: { nome: origem.nome, assumida: origemAssumida, iata: origem.iata || '', uf: origem.uf || '', lat: origem.lat, lon: origem.lon },
+    regiao: regiaoId,
+    transporte: t,
     regiaoCusto: custo.nome,
     climate: clima,
     money: { totalMin: eq.estimatedMin, totalMax: eq.estimatedMax, perPerson: false, breakdown: eq.breakdown, savingTips: economia },

@@ -1,6 +1,10 @@
 // Tela: Destino (painel ao vivo) — Farol · byGui
-import { previsao, qualidadeAr, climaAnoPassado, cotacaoBRL, moedasSuportadas, proximosFeriados, wikiResumo, lugarPorCoordenada, msgErro } from '../api.js';
+import { previsao, qualidadeAr, climaAnoPassado, cotacaoBRL, moedasSuportadas, proximosFeriados, wikiResumo, lugarPorCoordenada, fotosWiki, pontosTuristicos, msgErro } from '../api.js';
 import { esc, icone, bandeira, carregandoHTML, erroHTML, vazioHTML, numero, diaSemana, dataCurta, dataLonga, MESES_CURTOS } from '../ui.js';
+import { htmlCompartilhar, ligarCompartilhar, urlCompleta } from '../share.js';
+import { montarPrecos } from './precos-hub.js';
+import { datasPadrao } from '../links.js';
+import { GRUPOS, organizar, raioPara } from '../pontos.js';
 import { tempoTexto, tempoIcone, aqiEuropeu, uvTexto, estatisticaMensal, melhoresMeses, condicoesProximas, descreverEstacao } from '../clima.js';
 
 const moedaNome = (c) => { try { return new Intl.DisplayNames(['pt-BR'], { type: 'currency' }).of(c); } catch { return c; } };
@@ -16,7 +20,7 @@ export function render(ctx) {
   const id = params[0] || '';
   const dest = dados.destaques.find((d) => d.slug === id);
   let lugar = null;
-  if (dest) lugar = { nome: dest.nome, lat: dest.lat, lon: dest.lon, cc: dest.pais, regiao: dest.local, wiki: dest.wiki, iata: dest.iata, resumo: dest.resumo };
+  if (dest) lugar = { nome: dest.nome, lat: dest.lat, lon: dest.lon, cc: dest.pais, regiao: dest.local, wiki: dest.wiki, iata: dest.iata, resumo: dest.resumo, tipo: dest.tipo, civitatis: dest.civitatis };
   else {
     const m = id.match(/^(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)$/);
     if (m && Math.abs(+m[1]) <= 90 && Math.abs(+m[2]) <= 180) {
@@ -31,6 +35,7 @@ export function render(ctx) {
 
   const desenhar = () => {
     const pais = dados.paises[lugar.cc];
+    const raio = raioPara(lugar.tipo);
     const nome = lugar.nome || 'Local selecionado';
     ctx.titulo(nome);
     const qPlan = new URLSearchParams({ destino: nome, lat: lugar.lat, lon: lugar.lon });
@@ -42,15 +47,17 @@ export function render(ctx) {
       <a class="voltar" href="#/">${icone('i-voltar')} Início</a>
       <header class="destino-cab">
         <div>
-          <p class="kicker">${lugar.cc ? `<img src="${bandeira(lugar.cc)}" alt="" width="20" height="14" style="display:inline-block;vertical-align:-2px;border-radius:3px;margin-right:6px">` : ''}${esc([lugar.regiao, pais && pais.n].filter(Boolean).join(' · ') || 'Painel do destino')}</p>
+          <p class="kicker">${lugar.cc ? `<img src="${bandeira(lugar.cc)}" alt="" width="20" height="14" style="display:inline-block;vertical-align:-2px;border-radius:3px;margin-right:6px">` : ''}${esc([lugar.regiao, pais && pais.n].filter((x, i, arr) => x && arr.indexOf(x) === i).join(' · ') || 'Painel do destino')}</p>
           <h1>${esc(nome)}</h1>
           <p class="faint num">${numero(lugar.lat, 3)}, ${numero(lugar.lon, 3)}${lugar.resumo ? ' · ' + esc(lugar.resumo) : ''}</p>
         </div>
         <div class="acoes" style="margin-top:0">
           <a class="btn btn--primario" href="#/planejar?${qPlan}">Planejar viagem para cá</a>
-          <a class="btn btn--secundario" href="#/precos?${qPreco}">Ver preços</a>
+          <button type="button" class="btn btn--secundario" data-rolar>Ver preços</button>
         </div>
       </header>
+      <figure class="hero-foto" id="hero-foto"><img alt="" id="hero-img" decoding="async"><figcaption id="hero-cred" hidden></figcaption></figure>
+      <div class="linha-acoes" style="margin-top:var(--sp-4)"><span class="faint">Compartilhar este painel:</span>${htmlCompartilhar()}</div>
 
       <section class="secao" aria-labelledby="t-agora" style="margin-top:var(--sp-6)">
         <h2 id="t-agora">Agora</h2>
@@ -68,6 +75,22 @@ export function render(ctx) {
           <div class="card" id="box-cond">${carregandoHTML('Analisando os próximos dias', 4)}</div>
           <div class="card" id="box-ano">${carregandoHTML('Carregando clima do último ano', 4)}</div>
         </div>
+      </section>
+
+      <section class="secao" aria-labelledby="t-pontos">
+        <div class="secao__cab"><h2 id="t-pontos">O que ver por perto</h2><span class="faint">Fonte: OpenStreetMap (colaborativo) · raio de ${numero(raio / 1000, 1)} km</span></div>
+        <div id="box-pontos">${carregandoHTML('Buscando pontos turísticos no OpenStreetMap', 3)}</div>
+      </section>
+
+      <section class="secao" aria-labelledby="t-precos" id="precos-destino">
+        <div class="secao__cab"><h2 id="t-precos">Preços e reservas</h2><a class="btn btn--fantasma btn--pequeno" href="#/precos?${qPreco}">Ajustar origem e datas ${icone('i-seta')}</a></div>
+        <p class="faint">Saindo de São Paulo, 2 adultos, datas de exemplo. Os links abrem os sites oficiais com a busca preenchida.</p>
+        <div id="box-precos"></div>
+      </section>
+
+      <section class="secao" aria-labelledby="t-dicas-esp">
+        <h2 id="t-dicas-esp">Dicas de especialista</h2>
+        <div id="box-dicas"></div>
       </section>
 
       <section class="secao" aria-labelledby="t-local">
@@ -92,6 +115,85 @@ export function render(ctx) {
 
     const $ = (s) => el.querySelector(s);
     const { lat, lon } = lugar;
+    let resumoTempo = '';
+    el.querySelector('[data-rolar]')?.addEventListener('click', (ev) => { ev.preventDefault(); const h = $('#t-precos'); h.setAttribute('tabindex', '-1'); h.scrollIntoView({ behavior: 'smooth', block: 'start' }); h.focus({ preventScroll: true }); });
+    ligarCompartilhar(el, () => {
+      const hash = dest ? `#/destino/${dest.slug}` : location.hash;
+      return { titulo: `${nome} · Farol`, texto: [`📍 ${nome}${pais ? ` (${pais.n})` : ''}`, resumoTempo, 'Clima ao vivo, câmbio, feriados, pontos turísticos e preços estimados no Farol:'].filter(Boolean).join('\n'), url: urlCompleta(hash) };
+    });
+
+    // ----- Foto (Wikipédia / Wikimedia Commons) -----
+    function mostrarFoto(src, titulo, pagina) {
+      const img = $('#hero-img'), fig = $('#hero-foto'), cred = $('#hero-cred');
+      if (!src) { fig.classList.add('is-vazio'); return; }
+      img.onload = () => img.classList.add('is-ok');
+      img.onerror = () => fig.classList.add('is-vazio');
+      img.alt = `Foto de ${titulo || nome} (Wikipédia)`;
+      img.src = src;
+      cred.hidden = false;
+      cred.innerHTML = `Foto: <a href="${esc(pagina)}" target="_blank" rel="noopener noreferrer">Wikipédia<span class="sr-only"> (abre em nova aba)</span></a>`;
+    }
+    if (lugar.wiki) {
+      fotosWiki([lugar.wiki], { tamanho: 1280, signal }).then((m) => {
+        if (signal.aborted) return;
+        const f = m[lugar.wiki];
+        mostrarFoto(f && f.src, nome, `https://pt.wikipedia.org/wiki/${encodeURIComponent(lugar.wiki)}`);
+      }).catch(() => $('#hero-foto').classList.add('is-vazio'));
+    }
+
+    // ----- Pontos turísticos (OpenStreetMap) -----
+    let grupoSel = 'todos', pontos = [];
+    function desenharPontos() {
+      const box = $('#box-pontos');
+      const lista = pontos.filter((p) => grupoSel === 'todos' || p.grupo === grupoSel).slice(0, 24);
+      const presentes = new Set(pontos.map((p) => p.grupo));
+      box.innerHTML = `<div class="filtros" role="group" aria-label="Filtrar por tipo">${GRUPOS.filter((g) => g.id === 'todos' || presentes.has(g.id)).map((g) => `<button type="button" class="chip" data-grupo="${g.id}" aria-pressed="${g.id === grupoSel}">${g.rotulo}</button>`).join('')}</div>
+        ${lista.length ? `<ul class="pontos">${lista.map((p) => `<li class="card card--tight ponto">
+          <p class="card__rotulo" style="margin:0">${esc(p.tipo)} · <span class="num">${p.dist < 1 ? numero(p.dist * 1000) + ' m' : numero(p.dist, 1) + ' km'}</span></p>
+          <h3>${esc(p.nome)}</h3>
+          <div class="ponto__links">
+            <a href="https://www.google.com/maps/search/?api=1&query=${p.lat.toFixed(6)},${p.lon.toFixed(6)}" target="_blank" rel="noopener noreferrer">Google Maps<span class="sr-only"> para ${esc(p.nome)} (abre em nova aba)</span></a>
+            <a href="https://www.openstreetmap.org/${p.id}" target="_blank" rel="noopener noreferrer">OpenStreetMap<span class="sr-only"> para ${esc(p.nome)} (abre em nova aba)</span></a>
+            ${p.wikiPt ? `<a href="https://pt.wikipedia.org/wiki/${encodeURIComponent(p.wikiPt.replace(/ /g, '_'))}" target="_blank" rel="noopener noreferrer">Wikipédia<span class="sr-only"> sobre ${esc(p.nome)} (abre em nova aba)</span></a>` : ''}
+          </div></li>`).join('')}</ul>` : vazioHTML('Nenhum ponto deste tipo no raio pesquisado.')}
+        <p class="faint" style="margin-top:var(--sp-3)">${pontos.length} lugares com nome no OpenStreetMap; mostramos até 24, priorizando os que têm artigo na Wikipédia e os mais perto. Dados colaborativos: confira horários e acesso antes de ir.</p>`;
+      box.querySelectorAll('[data-grupo]').forEach((b) => b.addEventListener('click', () => { grupoSel = b.dataset.grupo; desenharPontos(); $(`#box-pontos [data-grupo="${grupoSel}"]`)?.focus(); }));
+    }
+    async function carregarPontos() {
+      const box = $('#box-pontos');
+      box.innerHTML = carregandoHTML('Buscando pontos turísticos no OpenStreetMap', 3);
+      try {
+        const r = await pontosTuristicos(lat, lon, raio, { signal, onTentativa: (i) => { if (i && !signal.aborted) box.querySelector('.sr-only') && (box.querySelector('.sr-only').textContent = 'Servidor principal falhou; tentando o servidor reserva do OpenStreetMap'); } });
+        if (signal.aborted) return;
+        pontos = organizar(r.elementos, { lat, lon }, raio);
+        if (!pontos.length) { box.innerHTML = vazioHTML('O OpenStreetMap não tem pontos turísticos com nome neste raio.'); return; }
+        desenharPontos();
+      } catch (e) {
+        if (e.status === -1) return;
+        montarErro(box, e, carregarPontos);
+      }
+    }
+
+    // ----- Preços -----
+    const [idaEx, voltaEx] = datasPadrao(null, 8);
+    montarPrecos($('#box-precos'), dados, { destino: nome, pais: lugar.cc, origem: 'São Paulo', origemUF: 'SP', ida: idaEx, volta: voltaEx, adultos: 2, iataO: 'SAO', iataD: lugar.iata || '', civitatis: lugar.civitatis || '', destinoLat: lat, destinoLon: lon });
+
+    // ----- Dicas de especialista por tipo -----
+    let tipoSel = lugar.tipo || '';
+    function desenharDicas() {
+      const box = $('#box-dicas');
+      const tipos = Object.entries(dados.dicasPorTipo);
+      const dz = dados.dicasPorTipo[tipoSel];
+      box.innerHTML = `${lugar.tipo ? '' : `<p class="muted">Que tipo de destino é ${esc(nome)}? Escolha para ver as dicas.</p>`}
+        ${lugar.tipo ? `<p class="faint">Tipo de destino: <span class="selo">${esc(dz.rotulo)}</span></p>` : `<div class="filtros" role="group" aria-label="Tipo de destino">${tipos.map(([k, v]) => `<button type="button" class="chip" data-tipo="${k}" aria-pressed="${k === tipoSel}">${esc(v.rotulo)}</button>`).join('')}</div>`}
+        ${dz ? `<div class="grid grid--3">
+          <div class="card"><p class="card__rotulo">Melhor época</p><p style="margin:0">${esc(dz.epoca)}</p></div>
+          <div class="card"><p class="card__rotulo">Como economizar</p><ul class="lista-marcada lista-limpa">${dz.economizar.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>
+          <div class="card"><p class="card__rotulo">O que evitar</p><ul class="lista-marcada lista-limpa">${dz.evitar.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>
+        </div><p class="faint" style="margin-top:var(--sp-3)">Orientações gerais de especialista para ${esc(dz.rotulo.toLowerCase())}, escritas pela equipe do Farol. Combine com o clima medido acima.</p>` : ''}`;
+      box.querySelectorAll('[data-tipo]').forEach((b) => b.addEventListener('click', () => { tipoSel = b.dataset.tipo; desenharDicas(); $(`#box-dicas [data-tipo="${tipoSel}"]`)?.focus(); }));
+    }
+    desenharDicas();
 
     // ----- País (tabela local derivada de mledoze/countries) -----
     const bp = $('#box-pais');
@@ -139,6 +241,7 @@ export function render(ctx) {
         signal.addEventListener('abort', () => clearInterval(relogio), { once: true });
 
         const cond = condicoesProximas(p);
+        resumoTempo = `Agora: ${Math.round(c.temperature_2m)} °C, ${tempoTexto(c.weather_code).toLowerCase()}. Próximos 16 dias: ${Math.round(cond.tmin)}° a ${Math.round(cond.tmax)} °C.`;
         const bons = new Set(cond.bons.map((x) => x.data));
         $('#box-prev').innerHTML = `<ul class="previsao" tabindex="0" aria-label="Previsão diária, role horizontalmente">${d.time.map((t, i) => `
           <li class="${bons.has(t) ? 'is-bom' : ''}">
@@ -278,20 +381,23 @@ export function render(ctx) {
       try {
         const w = await wikiResumo(lugar.wiki || nome, { signal });
         if (signal.aborted) return;
-        const img = w.thumbnail && w.thumbnail.source;
-        box.innerHTML = `<div class="wiki ${img ? 'wiki--img' : ''}">
-          ${img ? `<img src="${esc(img)}" alt="Imagem ilustrativa: ${esc(w.title)}" loading="lazy">` : ''}
+        const pagina = (w.content_urls && w.content_urls.desktop && w.content_urls.desktop.page) || 'https://pt.wikipedia.org';
+        if (!lugar.wiki) {
+          fotosWiki([w.title], { tamanho: 1280, signal }).then((m) => { if (!signal.aborted) { const f = m[w.title]; mostrarFoto(f && f.src, w.title, pagina); } }).catch(() => $('#hero-foto').classList.add('is-vazio'));
+        }
+        box.innerHTML = `<div class="wiki">
           <div><h3>${esc(w.title)}</h3>${w.description ? `<p class="faint">${esc(w.description)}</p>` : ''}<p>${esc(w.extract || '')}</p>
           <a href="${esc((w.content_urls && w.content_urls.desktop && w.content_urls.desktop.page) || 'https://pt.wikipedia.org')}" target="_blank" rel="noopener noreferrer">Ler na Wikipédia<span class="sr-only"> (abre em nova aba)</span></a>
           <p class="faint" style="margin-top:var(--sp-2)">Texto: Wikipédia em português (CC BY-SA).</p></div></div>`;
       } catch (e) {
         if (e.status === -1) return;
+        if (!lugar.wiki) $('#hero-foto').classList.add('is-vazio');
         if (e.vazio) { box.innerHTML = vazioHTML('A Wikipédia em português não tem um resumo para este lugar.'); return; }
         montarErro(box, e, carregarWiki);
       }
     }
 
-    carregarTempo(); carregarAno(); carregarAr(); carregarCambio(); carregarFeriados(); carregarWiki();
+    carregarTempo(); carregarAno(); carregarAr(); carregarCambio(); carregarFeriados(); carregarWiki(); carregarPontos();
   };
 
   // Coordenadas sem nome/país: descobre por geocodificação reversa antes de desenhar
