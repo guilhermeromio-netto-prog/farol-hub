@@ -1,0 +1,26 @@
+# Farol · verificação de garantias (links, APIs, feeds e arquivos). Feito por byGui.
+name: Verificação de garantias
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: "17 9 * * *"  # todo dia às 06:17 (horário de Brasília)
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checks
+  cancel-in-progress: true
+
+jobs:
+  verificar:
+    name: Rodar tools/check.py
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verificar links, APIs, feeds e arquivos
+        run: python3 tools/check.py
