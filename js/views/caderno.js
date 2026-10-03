@@ -1,5 +1,5 @@
 // Tela: Caderno (resultado do planejador) — Farol · byGui
-import { esc, icone, faixa, reais, toast, MESES, MESES_CURTOS, confirmar, uid, dataBR } from '../ui.js';
+import { esc, icone, prefereMenosMovimento, faixa, reais, toast, MESES, MESES_CURTOS, confirmar, uid, dataBR } from '../ui.js';
 import { cadernoAtual, obterCaderno, salvarCaderno, estaSalvo, lerChecks, gravarChecks, apagarCaderno, limparAtual, MAX_CADERNOS, definirAtual, definirDatasCaderno, viagemDoCaderno, novaViagem, salvarViagem, listarViagens, MAX_VIAGENS, diasAte } from '../store.js';
 import { transporteRotulo, mesRotulo, orcamentoRotulo } from '../planner.js';
 import { htmlCompartilhar, ligarCompartilhar, urlCompleta, codificarBrief } from '../share.js';
@@ -7,6 +7,10 @@ import { ORIGEM_ROTEIRO } from '../gerador.js';
 import { montarPrecos } from './precos-hub.js';
 import { painelViagem } from './gastos.js';
 import { datasPadrao } from '../links.js';
+import { wikiResumo, midiaDestino, fotosWiki, creditosCommons, pontosTuristicos, variante } from '../api.js';
+import { organizar, raioPara, distanciaKm } from '../pontos.js';
+import { creditoHTML, ligarImagens, ligarCarrossel, videoCardHTML, ligarVideos, ytBusca, ligarRevelar, ligarParalaxe } from '../midia.js';
+import { ligarBarraAcoes } from './comum.js';
 
 export function render(ctx) {
   const { el, params, dados, signal } = ctx;
@@ -40,19 +44,28 @@ export function render(ctx) {
   if (brief.month !== 'flex') qPreco.set('mes', brief.month);
   const linkDestino = plan.destino ? (plan.destino.slug ? `#/destino/${plan.destino.slug}` : `#/destino/${plan.destino.lat.toFixed(4)},${plan.destino.lon.toFixed(4)}?${new URLSearchParams({ nome: plan.destino.nome, pais: plan.destino.cc })}`) : '';
 
+  const dNome = plan.destino ? plan.destino.nome : brief.destination;
+  const videos = (plan.destino && plan.destino.slug && dados.videos && dados.videos.porDestino[plan.destino.slug]) || [];
   el.innerHTML = `
-  <div class="shell">
-    <a class="voltar" href="${id === 'atual' ? '#/planejar' : '#/cadernos'}">${icone('i-voltar')} ${id === 'atual' ? 'Briefing' : 'Cadernos'}</a>
-    <p class="kicker">${esc(kicker)}</p>
-    <h1>${esc(plan.title)}</h1>
-    <div class="meta-linha">
-      <span class="selo">${esc(transporteRotulo(plan.transporte || brief.transport))}</span>
-      <span class="selo">${brief.days} dias</span>
-      <span class="selo">${brief.travelers} ${brief.travelers > 1 ? 'viajantes' : 'viajante'}</span>
-      <span class="selo">${esc(mesRotulo(brief.month))}</span>
-      <span class="selo">${esc(orcamentoRotulo(brief.budget))}</span>
-      ${plan.origem.assumida ? '<span class="selo selo--aviso">Origem assumida: ' + esc(plan.origem.nome) + '</span>' : ''}
+  <section class="hero-full caderno-hero" id="c-hero" aria-labelledby="c-titulo">
+    <div class="hero-full__midia foto"><img id="c-hero-img" data-paralaxe alt="" decoding="async" fetchpriority="high"></div>
+    <div class="hero-full__veu" aria-hidden="true"></div>
+    <div class="shell hero-full__conteudo">
+      <a class="voltar voltar--sobre" href="${id === 'atual' ? '#/planejar' : '#/cadernos'}">${icone('i-voltar')} ${id === 'atual' ? 'Briefing' : 'Cadernos'}</a>
+      <p class="kicker kicker--sobre">${esc(kicker)}</p>
+      <h1 id="c-titulo">${esc(plan.title)}</h1>
+      <div class="meta-linha">
+        <span class="selo selo--vidro">${esc(transporteRotulo(plan.transporte || brief.transport))}</span>
+        <span class="selo selo--vidro">${brief.days} dias</span>
+        <span class="selo selo--vidro">${brief.travelers} ${brief.travelers > 1 ? 'viajantes' : 'viajante'}</span>
+        <span class="selo selo--vidro">${esc(mesRotulo(brief.month))}</span>
+        <span class="selo selo--vidro">${esc(orcamentoRotulo(brief.budget))}</span>
+        ${plan.origem.assumida ? '<span class="selo selo--aviso">Origem assumida: ' + esc(plan.origem.nome) + '</span>' : ''}
+      </div>
     </div>
+    <p class="hero-full__cred" id="c-hero-cred" hidden></p>
+  </section>
+  <div class="shell com-barra">
     <p class="lead">${esc(plan.summary)}</p>
     <div class="acoes">
       <button type="button" class="btn btn--primario" id="btn-salvar">${salvo() ? 'Salvo neste aparelho' : 'Salvar caderno'}</button>
@@ -79,6 +92,16 @@ export function render(ctx) {
       <div class="card card--tight"><p class="card__rotulo">Lotação</p><p class="card__valor" style="font-size:1rem;line-height:1.35">${esc(plan.time.crowding.split(':')[0])}</p><p class="card__detalhe">${esc(plan.time.bookingLead.split('. ')[0])}</p></div>
     </div>
 
+    <section class="secao revela" aria-labelledby="c-t-videos" id="c-videos">
+      <div class="secao__cab"><h2 id="c-t-videos">Veja como é ${esc(dNome)}</h2><a class="btn btn--fantasma btn--pequeno" href="${esc(ytBusca(`${dNome} o que fazer roteiro de viagem`))}" target="_blank" rel="noopener noreferrer">Buscar vídeos no YouTube ${icone('i-externo')}<span class="sr-only"> (abre em nova aba)</span></a></div>
+      ${videos.length ? `<div class="carrossel" data-carrossel>
+        <div class="carrossel__pista videos" tabindex="0" role="region" aria-label="Vídeos sobre ${esc(dNome)} — role para o lado ou use as setas do teclado">${videos.map((v) => videoCardHTML(v)).join('')}</div>
+        <div class="carrossel__ctl"><button type="button" class="btn-icone" data-c-prev aria-label="Vídeos anteriores">${icone('i-esq')}</button><button type="button" class="btn-icone" data-c-next aria-label="Próximos vídeos">${icone('i-dir')}</button></div>
+      </div>
+      <p class="faint" style="margin-top:var(--sp-3)">Vídeos de criadores independentes, conferidos em ${esc(dataBR(dados.videos.verificadoEm))}; o player só carrega (sem cookies) quando você clica. Preços citados podem estar desatualizados.</p>`
+      : `<p class="muted">Ainda não temos vídeos conferidos para este lugar. O botão acima abre o YouTube já com a busca pronta.</p>`}
+    </section>
+
     <div class="abas" role="tablist" aria-label="Seções do caderno">
       ${ABAS.map(([k, r]) => `<button type="button" class="aba" role="tab" id="aba-${k}" aria-controls="painel-${k}" aria-selected="${k === aba}" tabindex="${k === aba ? 0 : -1}">${r}${k === 'checklist' ? ` · <span id="pct-aba">${pct()}%</span>` : ''}</button>`).join('')}
     </div>
@@ -86,6 +109,126 @@ export function render(ctx) {
   </div>`;
 
   const $ = (s) => el.querySelector(s);
+
+  // ---- paradas reais por dia (OpenStreetMap + Wikipédia/Commons), com links à vista ----
+  const ehDiaDeLugar = (d) => !/^(Chegada|Estrada|Volta|Último|Dia livre|Dia de descanso)/i.test(d.title);
+  const diasDeLugar = Math.max(...plan.options.map((op) => op.days.filter(ehDiaDeLugar).length), 0);
+  const par = { estado: plan.destino ? 'carregando' : 'sem', lista: [], fotos: {}, cred: {} };
+  const linkExtra = (id, q) => String(((dados.links.extras || []).find((x) => x.id === id) || {}).modelo || '').replace('{q}', encodeURIComponent(q));
+  const chipLink = (href, icon, rotulo, sr) => `<a class="chip-link" href="${esc(href)}" target="_blank" rel="noopener noreferrer">${icone(icon)} ${esc(rotulo)}<span class="sr-only"> ${esc(sr)} (abre em nova aba)</span></a>`;
+  function linksParada(nome, p) {
+    const q = `${nome} ${dNome}`;
+    const mapa = p ? `https://www.google.com/maps/search/?api=1&query=${p.lat.toFixed(6)},${p.lon.toFixed(6)}` : linkExtra('maps-busca', q);
+    return [
+      chipLink(mapa, 'i-pin', 'Mapa', `de ${nome}`),
+      chipLink(ytBusca(`${q} o que fazer`), 'i-play', 'Ver vídeo', `sobre ${nome}`),
+      chipLink(linkExtra('gyg-busca', q), 'i-ingresso', 'Passeios e ingressos', `de ${nome} no GetYourGuide`),
+      plan.destino && plan.destino.civitatis ? chipLink(`https://www.civitatis.com/br/${plan.destino.civitatis}/`, 'i-ingresso', 'Civitatis', `passeios em ${dNome}`) : '',
+      p && p.wikiPt ? chipLink(`https://pt.wikipedia.org/wiki/${encodeURIComponent(p.wikiPt.replace(/ /g, '_'))}`, 'i-externo', 'Wikipédia', `sobre ${nome}`) : '',
+    ].join('');
+  }
+  function linksGenericos() {
+    const q = `${dNome} o que fazer`;
+    return [
+      chipLink(linkExtra('maps-busca', q), 'i-pin', 'Buscar no mapa', `lugares em ${dNome}`),
+      chipLink(ytBusca(`${q} roteiro de viagem`), 'i-play', 'Ver vídeos', `sobre ${dNome}`),
+      chipLink(linkExtra('gyg-busca', dNome), 'i-ingresso', 'Passeios e ingressos', `em ${dNome} no GetYourGuide`),
+      plan.destino && plan.destino.civitatis ? chipLink(`https://www.civitatis.com/br/${plan.destino.civitatis}/`, 'i-ingresso', 'Civitatis', `passeios em ${dNome}`) : '',
+    ].join('');
+  }
+  function paradaConteudo(ord) {
+    if (par.estado === 'carregando') return `<div class="parada parada--sk" aria-hidden="true"><div class="sk"></div></div><div class="parada__links parada__links--solta">${linksGenericos()}</div>`;
+    const p = par.lista[ord];
+    if (!p) {
+      const msg = par.estado === 'erro' ? 'Não conseguimos buscar lugares reais agora (OpenStreetMap indisponível). Mesmo assim, estes atalhos abrem a busca pronta:'
+        : par.estado === 'sem' ? 'Destino sem coordenadas: não há lugares reais para sugerir. Atalhos de busca:' : 'Não há outro lugar catalogado para este dia. Atalhos de busca:';
+      return `<div class="parada parada--vazia"><div class="parada__corpo"><p class="parada__rot">Sugestão para este dia</p><p class="parada__meta">${msg}</p><div class="parada__links">${linksGenericos()}</div></div></div>`;
+    }
+    const f = p.wikiPt && par.fotos[p.wikiPt.replace(/ /g, '_')];
+    const dist = p.dist < 1 ? `${Math.round(p.dist * 1000)} m` : `${p.dist.toFixed(1).replace('.', ',')} km`;
+    return `<article class="parada">
+      <div class="parada__foto foto">${f ? `<img data-prog src="${esc(f.src)}" alt="Foto de ${esc(p.nome)}" loading="lazy" decoding="async" width="${f.largura}" height="${f.altura}">` : `<span class="parada__sem">Sem foto livre na Wikipédia</span>`}</div>
+      <div class="parada__corpo">
+        <p class="parada__rot">Lugar real · ${esc(p.tipo)} · ${dist} do centro</p>
+        <h4>${esc(p.nome)}</h4>
+        <div class="parada__links">${linksParada(p.nome, p)}</div>
+        ${f ? `<p class="parada__cred" data-cred="${esc(f.arquivo)}">Foto: Wikipédia</p>` : ''}
+      </div></article>`;
+  }
+  function notaParadas() {
+    if (par.estado === 'ok') return 'Os lugares vêm do OpenStreetMap (com preferência para os que têm artigo na Wikipédia) e as fotos, do Wikimedia Commons, com crédito. Eles ilustram o destino: o Farol não monta horários nem reserva por você. Confira funcionamento e preços nos links.';
+    if (par.estado === 'carregando') return 'Buscando lugares reais no OpenStreetMap…';
+    return 'Sem lugares reais disponíveis agora: mostramos só atalhos de busca, sem imagens genéricas.';
+  }
+  function preencherParadas() {
+    el.querySelectorAll('.parada-host').forEach((h) => { h.innerHTML = paradaConteudo(Number(h.dataset.ord)); });
+    const n = el.querySelector('#paradas-nota'); if (n) n.textContent = notaParadas();
+    ligarImagens(el); creditarParadas();
+  }
+  async function creditarParadas() {
+    const els = [...el.querySelectorAll('[data-cred]')].filter((e) => e.dataset.cred);
+    const falta = els.map((e) => e.dataset.cred).filter((n) => !par.cred[n.replace(/_/g, ' ')]);
+    if (falta.length) { try { Object.assign(par.cred, await creditosCommons(falta, { signal })); } catch { /* fica "Foto: Wikipédia" */ } }
+    els.forEach((e) => { const f = par.cred[e.dataset.cred.replace(/_/g, ' ')]; if (f) e.innerHTML = creditoHTML(f, { curto: true }); });
+  }
+  const intercalar = (pool) => {
+    const g = new Map(); pool.forEach((p) => { if (!g.has(p.grupo)) g.set(p.grupo, []); g.get(p.grupo).push(p); });
+    const filas = [...g.values()]; const out = [];
+    while (filas.some((f) => f.length)) filas.forEach((f) => { if (f.length) out.push(f.shift()); });
+    return out;
+  };
+  async function carregarParadas() {
+    const d = plan.destino;
+    if (!d || d.lat == null || !diasDeLugar) { par.estado = d ? 'ok' : 'sem'; preencherParadas(); return; }
+    try {
+      const raio = raioPara(d.tipo);
+      const r = await pontosTuristicos(d.lat, d.lon, raio, { signal, timeout: 18000 });
+      if (signal.aborted) return;
+      const lista = organizar(r.elementos, { lat: d.lat, lon: d.lon }, raio);
+      par.lista = intercalar(lista.slice(0, diasDeLugar * 2)).slice(0, diasDeLugar);
+      par.estado = 'ok';
+      preencherParadas();
+      const titulos = par.lista.filter((p) => p.wikiPt).map((p) => p.wikiPt.replace(/ /g, '_'));
+      if (titulos.length) {
+        try {
+          const m = await fotosWiki(titulos, { tamanho: 640, signal });
+          if (signal.aborted) return;
+          par.fotos = m; preencherParadas();
+        } catch { /* os cartões seguem úteis sem foto */ }
+      }
+    } catch (e) {
+      if (e.status === -1 || signal.aborted) return;
+      par.estado = 'erro'; preencherParadas();
+    }
+  }
+
+  // ---- foto de capa (Wikipédia/Commons) ----
+  async function carregarCapa() {
+    const box = $('#c-hero'), img = $('#c-hero-img'), cred = $('#c-hero-cred');
+    const vazio = () => { if (!img.getAttribute('src')) box.classList.add('is-vazio'); };
+    const d = plan.destino;
+    if (!d) { vazio(); return; }
+    try {
+      let titulo = d.wiki;
+      if (!titulo) {
+        const w = await wikiResumo(d.nome, { signal });
+        const c2 = w.coordinates;
+        if (!c2 || d.lat == null || distanciaKm({ lat: d.lat, lon: d.lon }, { lat: c2.lat, lon: c2.lon }) > 40) throw Object.assign(new Error('x'), { vazio: true });
+        titulo = w.title;
+      } else {
+        try { const q = sessionStorage.getItem('farol:thumb:' + titulo); if (q) { img.src = q; img.classList.add('is-lqip', 'is-ok'); box.classList.add('tem-foto'); } } catch { /* sem sessionStorage */ }
+      }
+      const m = await midiaDestino(titulo, { signal });
+      if (signal.aborted) return;
+      const f = m.hero.f;
+      const srcset = `${variante(f, 960)} 960w, ${variante(f, 1920)} 1920w`;
+      const pre = new Image(); pre.sizes = '100vw'; pre.srcset = srcset;
+      pre.onload = () => { img.sizes = '100vw'; img.srcset = srcset; img.src = variante(f, 1280); img.alt = `Foto de ${dNome}${f.descricao ? ': ' + f.descricao : ''}`.slice(0, 220); img.classList.remove('is-lqip'); img.classList.add('is-ok'); box.classList.add('tem-foto'); box.classList.remove('is-vazio'); };
+      pre.onerror = vazio;
+      pre.src = variante(f, 1280);
+      cred.hidden = false; cred.innerHTML = creditoHTML(f);
+    } catch (e) { if (e.status !== -1) vazio(); }
+  }
 
   // ---- painéis ----
   function pOpcoes() {
@@ -102,10 +245,12 @@ export function render(ctx) {
         </button>`).join('')}
       </div>
       <h2 style="margin-top:var(--sp-6)">Dia a dia · ${esc(o.tag)}</h2>
-      <ol class="dias">${o.days.map((d) => `<li class="card card--tight dia-item"><span class="dia-item__n" aria-hidden="true">${String(d.day).padStart(2, '0')}</span><div><h3 style="font-size:1rem;margin:0 0 6px"><span class="sr-only">Dia ${d.day}: </span>${esc(d.title)}</h3><ul>${d.activities.map((a) => `<li>${esc(a)}</li>`).join('')}</ul><p class="dia-item__noite">Pernoite · ${esc(d.overnight)}</p></div></li>`).join('')}</ol>
+      <ol class="dias">${(() => { let k = 0; return o.days.map((d) => { const ord = ehDiaDeLugar(d) ? k++ : -1; return `<li class="card card--tight dia-item"><span class="dia-item__n" aria-hidden="true">${String(d.day).padStart(2, '0')}</span><div><h3 style="font-size:1rem;margin:0 0 6px"><span class="sr-only">Dia ${d.day}: </span>${esc(d.title)}</h3><ul>${d.activities.map((a) => `<li>${esc(a)}</li>`).join('')}</ul><p class="dia-item__noite">Pernoite · ${esc(d.overnight)}</p>${ord >= 0 ? `<div class="parada-host" data-ord="${ord}">${paradaConteudo(ord)}</div>` : ''}</div></li>`; }).join(''); })()}</ol>
+      <p class="faint" id="paradas-nota" style="margin-top:var(--sp-3)">${notaParadas()}</p>
       ${plan.warnings.length ? `<div class="card aviso-card" style="margin-top:var(--sp-5)"><h3>Atenção</h3><ul class="lista-marcada lista-limpa">${plan.warnings.map((w) => `<li>${esc(w)}</li>`).join('')}</ul></div>` : ''}
       ${plan.localTips.length ? `<div class="card" style="margin-top:var(--sp-4)"><h3>Dicas de especialista</h3><ul class="lista-marcada lista-limpa">${plan.localTips.map((w) => `<li>${esc(w)}</li>`).join('')}</ul></div>` : ''}
       <p class="faint" style="margin-top:var(--sp-4)">${esc(ORIGEM_ROTEIRO.rotulo)}: ${esc(ORIGEM_ROTEIRO.explicacao.charAt(0).toLowerCase() + ORIGEM_ROTEIRO.explicacao.slice(1))} Tipos de lugar são sugestões, não reservas.</p>`;
+    ligarImagens($('#painel-opcoes')); creditarParadas();
     $('#painel-opcoes').querySelectorAll('[data-op]').forEach((b) => b.addEventListener('click', () => {
       sel = Number(b.dataset.op); pOpcoes(); pDinheiro(); if (!viagemDoCaderno(plan.id)) pGastos();
       $(`#painel-opcoes [data-op="${sel}"]`).focus();
@@ -177,6 +322,7 @@ export function render(ctx) {
       const bar = $('#painel-checklist .progresso');
       bar.setAttribute('aria-valuenow', p); bar.firstElementChild.style.width = p + '%';
       $('#pct-aba').textContent = p + '%';
+      const ct = $('#contagem'); ct.classList.remove('pulsou'); void ct.offsetWidth; ct.classList.add('pulsou');
     }));
   }
 
@@ -230,6 +376,21 @@ export function render(ctx) {
   }
 
   pOpcoes(); pClima(); pDinheiro(); pPrecos(); pGastos(); pTempo(); pChecklist();
+  carregarCapa(); carregarParadas();
+  ligarVideos(el); ligarCarrossel(el, { signal }); ligarParalaxe($('#c-hero'), { signal }); ligarRevelar(el, { signal });
+
+  // ---- barra de ações no celular ----
+  {
+    const barra = document.createElement('div');
+    barra.className = 'barra-acoes'; barra.setAttribute('data-compartilhar', ''); barra.setAttribute('role', 'region'); barra.setAttribute('aria-label', 'Ações rápidas do caderno');
+    barra.innerHTML = `<a class="btn btn--whats" data-whats href="https://wa.me/" target="_blank" rel="noopener noreferrer">${icone('i-whats')} WhatsApp<span class="sr-only"> (abre em nova aba)</span></a>
+      <button type="button" class="btn btn--primario" data-b-salvar>${salvo() ? 'Salvo' : 'Salvar'}</button>
+      <button type="button" class="btn btn--secundario" data-b-reservar>Reservar</button>`;
+    el.appendChild(barra);
+    ligarBarraAcoes(barra, $('#c-hero'), signal);
+    barra.querySelector('[data-b-salvar]').addEventListener('click', () => { $('#btn-salvar').click(); barra.querySelector('[data-b-salvar]').textContent = 'Salvo'; });
+    barra.querySelector('[data-b-reservar]').addEventListener('click', () => { const a = $('#aba-precos'); a.click(); a.scrollIntoView({ behavior: prefereMenosMovimento() ? 'auto' : 'smooth', block: 'center' }); });
+  }
 
   // ---- compartilhar (link reconstrói o mesmo caderno) ----
   ligarCompartilhar(el, () => {

@@ -1,6 +1,8 @@
 // Tela: Início — Farol · byGui
-import { geocodificar, todasNoticias, emAlta, msgErro } from '../api.js';
-import { esc, icone, bandeira, skCards, erroHTML, vazioHTML, carregandoHTML, numero, dataBR } from '../ui.js';
+import { geocodificar, todasNoticias, emAlta, msgErro, fotosWiki, creditosCommons } from '../api.js';
+import { esc, icone, bandeira, skCards, erroHTML, vazioHTML, carregandoHTML, numero, dataBR, faixa } from '../ui.js';
+import { estimarRapido } from '../inspiracao.js';
+import { ligarCarrossel, ligarRevelar, creditoHTML } from '../midia.js';
 import { listarCadernos, listarViagens, diasAte } from '../store.js';
 import { hrefDestino, cardDestaque, cardNoticia, carregarFotosCartoes } from './comum.js';
 
@@ -42,6 +44,21 @@ export function render(ctx) {
       </div>
     </section>
 
+    <section class="secao revela" aria-labelledby="titulo-insp" style="margin-top:var(--sp-6)">
+      <div class="secao__cab"><h2 id="titulo-insp">Inspire-se por tipo de viagem</h2><span class="faint">Fotos reais da Wikipédia · toque para abrir o painel ao vivo</span></div>
+      <div class="insp-abas" role="tablist" aria-label="Tipo de viagem">
+        ${(dados.inspiracoes || []).map((t, i) => `<button type="button" class="chip" role="tab" id="insp-aba-${esc(t.id)}" data-insp="${esc(t.id)}" aria-selected="${i === 0}" aria-controls="insp-painel" tabindex="${i === 0 ? 0 : -1}">${esc(t.rotulo)}</button>`).join('')}
+      </div>
+      <p class="muted" id="insp-texto" style="margin-top:0"></p>
+      <div id="insp-painel" role="tabpanel" aria-labelledby="insp-aba-${esc(((dados.inspiracoes || [])[0] || {}).id || '')}">
+        <div class="carrossel" data-carrossel>
+          <div class="carrossel__pista cartoes" id="insp-pista" tabindex="0" role="region" aria-label="Destinos deste tipo de viagem — role para o lado ou use as setas do teclado"></div>
+          <div class="carrossel__ctl"><button type="button" class="btn-icone" data-c-prev aria-label="Destinos anteriores">${icone('i-esq')}</button><button type="button" class="btn-icone" data-c-next aria-label="Próximos destinos">${icone('i-dir')}</button></div>
+        </div>
+      </div>
+      <p class="faint" style="margin-top:var(--sp-2)">O custo em cada cartão é uma estimativa do Farol para 7 dias e 2 pessoas, saindo do Brasil (Econômico a Equilibrado); muda com sua data e seu orçamento.</p>
+    </section>
+
     ${prox ? `<section class="secao" aria-labelledby="titulo-prox" style="margin-top:var(--sp-6)">
       <div class="card contagem">
         <div><p class="card__rotulo" id="titulo-prox">Próxima viagem</p><h2 style="margin:0">${esc(prox.nome)}</h2><p class="card__detalhe">${esc(dataBR(prox.inicio))}${prox.fim ? ' a ' + esc(dataBR(prox.fim)) : ''}</p></div>
@@ -73,6 +90,10 @@ export function render(ctx) {
         <button type="button" class="chip" data-filtro="ex" aria-pressed="false">Exterior</button>
       </div>
       <div class="grid grid--3" id="grade-destaques">${dados.destaques.map((d) => cardDestaque(d, dados.paises)).join('')}</div>
+      <details class="fotos-creditos" id="fotos-creditos">
+        <summary>Créditos das fotos (autor e licença)</summary>
+        <div id="box-creditos" aria-live="polite"><p class="faint">Abra para carregar os créditos de cada foto, direto do Wikimedia Commons.</p></div>
+      </details>
     </section>
 
     <section class="secao" aria-labelledby="titulo-news">
@@ -87,6 +108,69 @@ export function render(ctx) {
     el.querySelectorAll('[data-filtro]').forEach((x) => x.setAttribute('aria-pressed', x === b));
     el.querySelectorAll('#grade-destaques > a').forEach((a) => { a.hidden = f === 'br' ? a.dataset.pais !== 'BR' : f === 'ex' ? a.dataset.pais === 'BR' : false; });
   }));
+
+  // ---- inspirações por tipo de viagem ----
+  {
+    const tipos = dados.inspiracoes || [];
+    const pista = el.querySelector('#insp-pista'), texto = el.querySelector('#insp-texto'), painel = el.querySelector('#insp-painel');
+    const abas = [...el.querySelectorAll('[data-insp]')];
+    const porSlug = new Map(dados.destaques.map((d) => [d.slug, d]));
+    const cartaoInsp = (d) => {
+      const e = estimarRapido(dados, { cc: d.pais, dias: 7, pessoas: 2 });
+      const html = cardDestaque(d, dados.paises);
+      return html.replace('<span class="destaque__ir">', `<span class="destaque__custo num">≈ ${esc(faixa(e.economico.min, e.equilibrado.max))} <small>estimativa · 7 dias, 2 pessoas</small></span><span class="destaque__ir">`);
+    };
+    function mostrar(id, focar) {
+      const t = tipos.find((x) => x.id === id) || tipos[0];
+      if (!t) return;
+      abas.forEach((b) => { const on = b.dataset.insp === t.id; b.setAttribute('aria-selected', on); b.tabIndex = on ? 0 : -1; });
+      painel.setAttribute('aria-labelledby', 'insp-aba-' + t.id);
+      texto.textContent = t.texto;
+      pista.innerHTML = t.slugs.map((sl) => porSlug.get(sl)).filter(Boolean).map(cartaoInsp).join('');
+      pista.scrollLeft = 0;
+      carregarFotosCartoes(pista, { signal });
+      if (focar) el.querySelector(`[data-insp="${t.id}"]`).focus();
+    }
+    abas.forEach((b, i) => {
+      b.addEventListener('click', () => mostrar(b.dataset.insp));
+      b.addEventListener('keydown', (ev) => {
+        let j = null;
+        if (ev.key === 'ArrowRight') j = (i + 1) % abas.length;
+        if (ev.key === 'ArrowLeft') j = (i - 1 + abas.length) % abas.length;
+        if (ev.key === 'Home') j = 0;
+        if (ev.key === 'End') j = abas.length - 1;
+        if (j !== null) { ev.preventDefault(); mostrar(abas[j].dataset.insp, true); }
+      });
+    });
+    if (tipos.length) mostrar(tipos[0].id);
+    ligarCarrossel(el, { signal });
+  }
+
+  // ---- créditos das fotos (carrega só ao abrir) ----
+  {
+    const det = el.querySelector('#fotos-creditos'), box = el.querySelector('#box-creditos');
+    let feito = false;
+    async function carregarCreditos() {
+      box.innerHTML = carregandoHTML('Buscando créditos no Wikimedia Commons', 2);
+      try {
+        const m = await fotosWiki(dados.destaques.map((d) => d.wiki), { tamanho: 500, signal });
+        const arqs = Object.values(m).map((x) => x.arquivo).filter(Boolean);
+        const cr = await creditosCommons(arqs, { signal });
+        if (signal.aborted) return;
+        const itens = dados.destaques.map((d) => { const f = m[d.wiki]; const c = f && cr[(f.arquivo || '').replace(/_/g, ' ')]; return c ? `<li><strong>${esc(d.nome)}:</strong> ${creditoHTML(c).replace(/^Foto: /, '')}</li>` : ''; }).filter(Boolean);
+        const sem = dados.destaques.length - itens.length;
+        box.innerHTML = itens.length ? `<ul>${itens.join('')}</ul>${sem ? `<p class="faint">${sem} foto(s) sem crédito carregado agora (limite de pedidos do Commons ou foto sem registro). Tente de novo em instantes.</p>` : ''}` : erroHTML('Os créditos não carregaram agora (o Wikimedia Commons pode ter pedido uma pausa).');
+        box.querySelector('[data-acao="tentar"]')?.addEventListener('click', carregarCreditos);
+        feito = itens.length > 0;
+      } catch (e) {
+        if (e.status === -1) return;
+        box.innerHTML = erroHTML(msgErro(e));
+        box.querySelector('[data-acao="tentar"]')?.addEventListener('click', carregarCreditos);
+      }
+    }
+    det.addEventListener('toggle', () => { if (det.open && !feito) carregarCreditos(); });
+  }
+  ligarRevelar(el, { signal });
 
   // ---- em alta (Wikimedia Pageviews) ----
   const boxAlta = el.querySelector('#box-alta');

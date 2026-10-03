@@ -261,7 +261,7 @@ export async function fotosWiki(titulos, { tamanho = 480, signal } = {}) {
   const lista = [...new Set(titulos.filter(Boolean))].slice(0, 50);
   if (!lista.length) return {};
   const u = 'https://pt.wikipedia.org/w/api.php?' + new URLSearchParams({
-    action: 'query', prop: 'pageimages', piprop: 'thumbnail', pithumbsize: String(tamanho), pilimit: '50',
+    action: 'query', prop: 'pageimages', piprop: 'thumbnail|name', pithumbsize: String(tamanho), pilimit: '50',
     titles: lista.join('|'), redirects: '1', format: 'json', formatversion: '2', origin: '*',
   });
   const d = await buscar(u, { fonte: 'A Wikipédia', ttl: 24 * 60 * 60 * 1000, signal });
@@ -275,7 +275,7 @@ export async function fotosWiki(titulos, { tamanho = 480, signal } = {}) {
   (q.pages || []).forEach((p) => {
     if (!p.thumbnail) return;
     const orig = volta[p.title] || p.title;
-    mapa[orig] = { src: p.thumbnail.source, largura: p.thumbnail.width, altura: p.thumbnail.height, titulo: p.title };
+    mapa[orig] = { src: p.thumbnail.source, largura: p.thumbnail.width, altura: p.thumbnail.height, titulo: p.title, arquivo: p.pageimage || '' };
   });
   return mapa;
 }
@@ -296,7 +296,7 @@ nwr["leisure"="park"]["name"]["wikidata"]${a};
 }
 
 /** Lista de pontos turísticos reais perto de (lat, lon). Tenta o servidor principal e, se falhar, o de reserva. */
-export async function pontosTuristicos(lat, lon, raio, { signal, onTentativa = () => {} } = {}) {
+export async function pontosTuristicos(lat, lon, raio, { signal, onTentativa = () => {}, timeout = 32000 } = {}) {
   const la = Math.round(lat * 1000) / 1000, lo = Math.round(lon * 1000) / 1000;
   const chave = `osm:${la},${lo},${raio}`;
   const cache = lerCacheLocal(chave);
@@ -306,7 +306,7 @@ export async function pontosTuristicos(lat, lon, raio, { signal, onTentativa = (
   for (let i = 0; i < OVERPASS.length; i++) {
     onTentativa(i);
     try {
-      const d = await buscar(OVERPASS[i], { fonte: i ? 'O servidor reserva do OpenStreetMap' : 'O OpenStreetMap (Overpass)', metodo: 'POST', corpo, semCache: true, timeout: 32000, signal });
+      const d = await buscar(OVERPASS[i], { fonte: i ? 'O servidor reserva do OpenStreetMap' : 'O OpenStreetMap (Overpass)', metodo: 'POST', corpo, semCache: true, timeout, signal });
       if (!d || !Array.isArray(d.elements)) throw new ErroAPI('O OpenStreetMap devolveu uma resposta inesperada.');
       if (d.remark && /timed out|runtime error/i.test(d.remark) && !d.elements.length) throw new ErroAPI('O OpenStreetMap não terminou a consulta a tempo.');
       const r = { elementos: d.elements, servidor: i, quando: new Date().toISOString() };
@@ -388,3 +388,106 @@ export async function ultimaVerificacao({ signal } = {}) {
   const d = await r.json();
   return { run: (d.workflow_runs || [])[0] || null, restante: resta };
 }
+
+
+/* ---------------- Mídia: Wikipédia (media-list) + Wikimedia Commons (autor e licença) ---------------- */
+const TTL_COMMONS = 30 * 24 * 60 * 60 * 1000;
+const TTL_LISTA = 7 * 24 * 60 * 60 * 1000;
+const EXT_OK = /\.(jpe?g|webp)$/i;
+const NAO_FOTO = /(flag|bandeira|brasao|brasão|escudo|coat[_ ]of|logo|\bmap\b|mapa|locator|location|icon|s[ií]mbolo|diagram|gr[aá]fico|climate|clima[_ ]|population|panorama_map|seal[_ ]of|signature|assinatura|stub)/i;
+
+/** Remove tags do HTML de metadados do Commons e devolve texto puro. */
+export function textoSemTags(html) {
+  if (!html) return '';
+  const doc = new DOMParser().parseFromString(String(html), 'text/html');
+  return (doc.body.textContent || '').replace(/\s+/g, ' ').trim();
+}
+const nomeArquivo = (t) => String(t).replace(/^[^:]+:/, '').replace(/_/g, ' ').trim();
+
+/**
+ * Autor, licença e URLs de arquivos do Commons. `arquivos`: nomes sem prefixo ("Foo bar.jpg").
+ * Devolve { nome: { url, thumb, w, h, artista, licenca, licencaUrl, pagina, descricao, restricao } }.
+ * Cache por arquivo (30 dias). Se o Commons limitar (429), devolve só o que estiver em cache.
+ */
+export async function creditosCommons(arquivos, { signal } = {}) {
+  const nomes = [...new Set(arquivos.map(nomeArquivo).filter(Boolean))];
+  const mapa = {};
+  const faltam = [];
+  nomes.forEach((n) => { const c = lerCacheLocal('cm:' + n); if (c) mapa[n] = c; else faltam.push(n); });
+  for (let i = 0; i < faltam.length; i += 40) {
+    const lote = faltam.slice(i, i + 40);
+    const u = 'https://commons.wikimedia.org/w/api.php?' + new URLSearchParams({
+      action: 'query', prop: 'imageinfo', iiprop: 'url|size|mime|extmetadata', iiurlwidth: '1280',
+      iiextmetadatafilter: 'Artist|LicenseShortName|LicenseUrl|ImageDescription|Restrictions', titles: lote.map((n) => 'File:' + n).join('|'),
+      format: 'json', formatversion: '2', origin: '*',
+    });
+    let d;
+    try { d = await buscar(u, { fonte: 'O Wikimedia Commons', ttl: 60 * 60 * 1000, signal, timeout: 20000 }); }
+    catch (e) { if (e.status === -1) throw e; if (e.status === 429) break; continue; }
+    const norm = {};
+    ((d.query && d.query.normalized) || []).forEach((x) => { norm[x.to] = x.from; });
+    ((d.query && d.query.pages) || []).forEach((p) => {
+      const ii = p.imageinfo && p.imageinfo[0];
+      if (!ii) return;
+      const em = ii.extmetadata || {};
+      const v = (k) => (em[k] && em[k].value) || '';
+      const nome = nomeArquivo(p.title);
+      const f = {
+        url: ii.url, thumb: ii.thumburl || ii.url, w: ii.width, h: ii.height, mime: ii.mime,
+        artista: textoSemTags(v('Artist')).slice(0, 120) || 'autor na página do arquivo',
+        licenca: textoSemTags(v('LicenseShortName')).slice(0, 40) || 'licença na página do arquivo',
+        licencaUrl: /^https?:\/\//.test(v('LicenseUrl')) ? v('LicenseUrl') : '',
+        descricao: textoSemTags(v('ImageDescription')).slice(0, 160),
+        restricao: textoSemTags(v('Restrictions')),
+        semMeta: !(textoSemTags(v('Artist')) && textoSemTags(v('LicenseShortName'))),
+        pagina: ii.descriptionurl || ('https://commons.wikimedia.org/wiki/File:' + encodeURIComponent(nome.replace(/ /g, '_'))),
+      };
+      mapa[nome] = f;
+      gravarCacheLocal('cm:' + nome, f, TTL_COMMONS);
+    });
+  }
+  return mapa;
+}
+
+/** URL de uma largura padrão (330, 500, 960, 1280, 1920) a partir do thumb de 1280 px do Commons. */
+export function variante(f, w) {
+  if (!f) return '';
+  if (w >= f.w) return f.url;
+  const m = /^(.*)\/\d+px-([^/]+)$/.exec(f.thumb || '');
+  const u = m ? `${m[1]}/${w}px-${m[2]}` : (f.thumb || f.url);
+  return u.replace('//thumb.wikimedia.org/', '//upload.wikimedia.org/');
+}
+
+/**
+ * Fotos reais de um destino (artigo da Wikipédia em português): foto principal + galeria, com crédito.
+ * Devolve { hero, galeria } (itens { nome, f }). Lança ErroAPI vazio se não houver fotos aproveitáveis.
+ */
+export async function midiaDestino(titulo, { signal, max = 14 } = {}) {
+  const chave = 'md:' + titulo;
+  const c = lerCacheLocal(chave);
+  let itens = c;
+  if (!itens) {
+    const d = await buscar(`https://pt.wikipedia.org/api/rest_v1/page/media-list/${encodeURIComponent(String(titulo).replace(/ /g, '_'))}`, { fonte: 'A Wikipédia', ttl: 60 * 60 * 1000, signal });
+    itens = (d.items || []).filter((i) => i.type === 'image' && i.showInGallery !== false)
+      .map((i) => ({ nome: nomeArquivo(i.title), lead: !!i.leadImage }))
+      .filter((i) => EXT_OK.test(i.nome) && !NAO_FOTO.test(i.nome));
+    const vistos = new Set();
+    itens = itens.filter((i) => (vistos.has(i.nome) ? false : vistos.add(i.nome)));
+    itens.sort((a, b) => Number(b.lead) - Number(a.lead));
+    itens = itens.slice(0, max + 6);
+    gravarCacheLocal(chave, itens, TTL_LISTA);
+  }
+  if (!itens.length) throw new ErroAPI('A Wikipédia não tem fotos para este lugar.', { vazio: true });
+  const cred = await creditosCommons(itens.map((i) => i.nome), { signal });
+  const boas = itens.map((i) => ({ nome: i.nome, lead: i.lead, f: cred[i.nome] }))
+    .filter((x) => x.f && !x.f.restricao && !x.f.semMeta && x.f.w >= 900 && x.f.h >= 500 && /^image\/(jpeg|webp)/.test(x.f.mime || 'image/jpeg'));
+  if (!boas.length) throw new ErroAPI('Não encontramos fotos livres em boa qualidade para este lugar.', { vazio: true });
+  // foto principal: prefere a de capa se for paisagem; senão a primeira paisagem
+  const paisagem = (x) => x.f.w / x.f.h >= 1.25;
+  const hero = boas.find((x) => x.lead && paisagem(x)) || boas.find(paisagem) || boas[0];
+  const galeria = boas.filter((x) => x !== hero).slice(0, max);
+  return { hero, galeria, total: boas.length };
+}
+
+/** Crédito curto em texto: "Autor · Licença". */
+export const creditoTexto = (f) => `${f.artista} · ${f.licenca}`;

@@ -71,7 +71,7 @@ export function ligarCompartilhar(raiz, obter) {
     const atualizar = () => { const x = obter(); w.href = 'https://wa.me/?text=' + encodeURIComponent(`${x.texto}\n\n${x.url}`); };
     atualizar();
     ['pointerdown', 'focus', 'keydown'].forEach((ev) => w.addEventListener(ev, atualizar));
-    if (navigator.share) {
+    if (s && navigator.share) {
       s.hidden = false;
       s.addEventListener('click', async () => {
         const x = obter();
@@ -79,7 +79,7 @@ export function ligarCompartilhar(raiz, obter) {
         catch (e) { if (e && e.name !== 'AbortError') toast('Não foi possível abrir o compartilhamento do aparelho.', 'erro'); }
       });
     }
-    c.addEventListener('click', async () => {
+    if (c) c.addEventListener('click', async () => {
       const x = obter();
       try { await navigator.clipboard.writeText(x.url); toast('Link copiado.', 'ok'); }
       catch { window.prompt('Copie o link:', x.url); }

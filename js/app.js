@@ -30,6 +30,15 @@ const vista = document.getElementById('vista');
 let ctrlAtual = null;
 let primeira = true;
 
+/* Elemento compartilhado: o cartão clicado "vira" o herói do destino (View Transitions). */
+let vtOrigem = null;
+document.addEventListener('click', (ev) => {
+  const a = ev.target.closest && ev.target.closest('a[data-vt]');
+  if (!a || ev.defaultPrevented || ev.button !== 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey || !document.startViewTransition || prefereMenosMovimento()) return;
+  const alvo = a.querySelector('.destaque__foto');
+  if (alvo) { alvo.style.viewTransitionName = 'destino-foto'; vtOrigem = alvo; }
+}, true);
+
 function lerHash() {
   const h = decodeURI(location.hash.replace(/^#/, '')) || '/';
   const [caminho, qs = ''] = h.split('?');
@@ -66,12 +75,14 @@ async function navegar() {
     return;
   }
 
+  const usarVT = !!vtOrigem && !primeira;
   const ctx = {
-    el: vista, params, query, signal, dados: base,
+    el: vista, params, query, signal, dados: base, vt: usarVT,
     titulo: (t) => { document.title = t ? `${t} · Farol` : 'Farol — hub de viagem'; },
   };
 
   const trocar = () => {
+    if (vtOrigem) { vtOrigem.style.viewTransitionName = ''; vtOrigem = null; }
     vista.setAttribute('aria-busy', 'true');
     try { (rota ? rota.view.render : naoEncontrado)(ctx); }
     catch (e) {

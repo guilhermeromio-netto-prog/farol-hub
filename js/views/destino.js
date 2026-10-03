@@ -1,10 +1,13 @@
 // Tela: Destino (painel ao vivo) — Farol · byGui
-import { previsao, qualidadeAr, climaAnoPassado, cotacaoBRL, moedasSuportadas, proximosFeriados, wikiResumo, lugarPorCoordenada, fotosWiki, pontosTuristicos, msgErro } from '../api.js';
-import { esc, icone, bandeira, carregandoHTML, erroHTML, vazioHTML, numero, diaSemana, dataCurta, dataLonga, MESES_CURTOS } from '../ui.js';
+import { previsao, qualidadeAr, climaAnoPassado, cotacaoBRL, moedasSuportadas, proximosFeriados, wikiResumo, lugarPorCoordenada, fotosWiki, pontosTuristicos, midiaDestino, creditosCommons, variante, lerCacheLocal, msgErro } from '../api.js';
+import { esc, icone, bandeira, reais, faixa, carregandoHTML, erroHTML, vazioHTML, numero, diaSemana, dataCurta, dataLonga, dataBR, MESES_CURTOS } from '../ui.js';
 import { htmlCompartilhar, ligarCompartilhar, urlCompleta } from '../share.js';
 import { montarPrecos } from './precos-hub.js';
 import { datasPadrao } from '../links.js';
 import { GRUPOS, organizar, raioPara } from '../pontos.js';
+import { galeriaHTML, ligarGaleria, abrirLightbox, creditoHTML, ligarImagens, ligarCarrossel, videoCardHTML, ligarVideos, ytBusca, ligarRevelar, ligarParalaxe } from '../midia.js';
+import { estimarRapido, destinosQueCabem, veredito, lerBolso, gravarBolso, primeiraFrase, valorBR } from '../inspiracao.js';
+import { ligarBarraAcoes } from './comum.js';
 import { tempoTexto, tempoIcone, aqiEuropeu, uvTexto, estatisticaMensal, melhoresMeses, condicoesProximas, descreverEstacao } from '../clima.js';
 
 const moedaNome = (c) => { try { return new Intl.DisplayNames(['pt-BR'], { type: 'currency' }).of(c); } catch { return c; } };
@@ -20,7 +23,7 @@ export function render(ctx) {
   const id = params[0] || '';
   const dest = dados.destaques.find((d) => d.slug === id);
   let lugar = null;
-  if (dest) lugar = { nome: dest.nome, lat: dest.lat, lon: dest.lon, cc: dest.pais, regiao: dest.local, wiki: dest.wiki, iata: dest.iata, resumo: dest.resumo, tipo: dest.tipo, civitatis: dest.civitatis };
+  if (dest) lugar = { slug: dest.slug, nome: dest.nome, lat: dest.lat, lon: dest.lon, cc: dest.pais, regiao: dest.local, wiki: dest.wiki, iata: dest.iata, resumo: dest.resumo, tipo: dest.tipo, civitatis: dest.civitatis };
   else {
     const m = id.match(/^(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)$/);
     if (m && Math.abs(+m[1]) <= 90 && Math.abs(+m[2]) <= 180) {
@@ -42,24 +45,71 @@ export function render(ctx) {
     const qPreco = new URLSearchParams({ destino: nome });
     if (lugar.cc) qPreco.set('pais', lugar.cc);
     if (lugar.iata) qPreco.set('iata', lugar.iata);
+    const videos = (lugar.slug && (dados.videos.porDestino[lugar.slug] || [])) || [];
+    const buscaVideo = ytBusca(`${nome} o que fazer roteiro de viagem`);
+    const vt = ctx.vt ? ' style="view-transition-name: destino-foto"' : '';
     el.innerHTML = `
-    <div class="shell">
-      <a class="voltar" href="#/">${icone('i-voltar')} Início</a>
-      <header class="destino-cab">
-        <div>
-          <p class="kicker">${lugar.cc ? `<img src="${bandeira(lugar.cc)}" alt="" width="20" height="14" style="display:inline-block;vertical-align:-2px;border-radius:3px;margin-right:6px">` : ''}${esc([lugar.regiao, pais && pais.n].filter((x, i, arr) => x && arr.indexOf(x) === i).join(' · ') || 'Painel do destino')}</p>
-          <h1>${esc(nome)}</h1>
-          <p class="faint num">${numero(lugar.lat, 3)}, ${numero(lugar.lon, 3)}${lugar.resumo ? ' · ' + esc(lugar.resumo) : ''}</p>
-        </div>
-        <div class="acoes" style="margin-top:0">
+    <section class="hero-full" id="hero" aria-labelledby="titulo-destino">
+      <div class="hero-full__midia foto"${vt}><img id="hero-img" data-paralaxe alt="" decoding="async" fetchpriority="high"></div>
+      <div class="hero-full__veu" aria-hidden="true"></div>
+      <div class="shell hero-full__conteudo">
+        <a class="voltar voltar--sobre" href="#/">${icone('i-voltar')} Início</a>
+        <p class="kicker kicker--sobre">${lugar.cc ? `<img src="${bandeira(lugar.cc)}" alt="" width="20" height="14" style="display:inline-block;vertical-align:-2px;border-radius:3px;margin-right:6px">` : ''}${esc([lugar.regiao, pais && pais.n].filter((x, i, arr) => x && arr.indexOf(x) === i).join(' · ') || 'Painel do destino')}</p>
+        <h1 id="titulo-destino">${esc(nome)}</h1>
+        ${lugar.resumo ? `<p class="hero-full__resumo">${esc(lugar.resumo)}</p>` : ''}
+        <div class="acoes hero-full__acoes">
           <a class="btn btn--primario" href="#/planejar?${qPlan}">Planejar viagem para cá</a>
-          <button type="button" class="btn btn--secundario" data-rolar>Ver preços</button>
+          <button type="button" class="btn btn--vidro" data-rolar>Ver preços</button>
+          <button type="button" class="btn btn--vidro" data-fotos hidden>${icone('i-foto')} Ver fotos</button>
         </div>
-      </header>
-      <figure class="hero-foto" id="hero-foto"><img alt="" id="hero-img" decoding="async"><figcaption id="hero-cred" hidden></figcaption></figure>
+      </div>
+      <p class="hero-full__cred" id="hero-cred" hidden></p>
+    </section>
+
+    <div class="shell com-barra">
       <div class="linha-acoes" style="margin-top:var(--sp-4)"><span class="faint">Compartilhar este painel:</span>${htmlCompartilhar()}</div>
 
-      <section class="secao" aria-labelledby="t-agora" style="margin-top:var(--sp-6)">
+      <section class="secao revela" aria-labelledby="t-insp" style="margin-top:var(--sp-6)">
+        <div class="inspira card">
+          <div class="inspira__topo">
+            <p class="kicker">Por que ir</p>
+            <h2 id="t-insp">${esc(nome)} em um olhar</h2>
+            <blockquote class="inspira__frase" id="insp-frase" hidden></blockquote>
+          </div>
+          <ul class="inspira__stats lista-limpa">
+            <li><span class="inspira__rot">Agora</span><strong id="insp-agora">${icone('i-nuvem')} carregando…</strong></li>
+            <li><span class="inspira__rot">Melhor época</span><strong id="insp-epoca">${dados.dicasPorTipo[lugar.tipo] ? esc(primeiraFrase(dados.dicasPorTipo[lugar.tipo].epoca, 90)) : 'Veja o clima medido abaixo'}</strong></li>
+            <li><span class="inspira__rot">Custo estimado</span><strong id="insp-custo">—</strong><span class="selo-estimativa">estimativa</span></li>
+          </ul>
+          <form class="bolso" id="form-bolso" novalidate aria-labelledby="t-bolso">
+            <h3 id="t-bolso">Cabe no seu bolso?</h3>
+            <p class="faint" style="margin:0 0 var(--sp-3)">Informe o que você pode gastar. O Farol compara com a estimativa para ${esc(nome)} e com os outros destinos da lista — sem inventar desconto.</p>
+            <div class="linha-form linha-form--3">
+              <div class="campo"><label for="b-orc">Orçamento total (R$)</label><input class="input num" id="b-orc" inputmode="numeric" autocomplete="off" placeholder="Ex.: 12000"></div>
+              <div class="campo"><label for="b-dias">Dias</label><input class="input num" id="b-dias" type="number" min="2" max="30" value="7"></div>
+              <div class="campo"><label for="b-pes">Pessoas</label><input class="input num" id="b-pes" type="number" min="1" max="9" value="2"></div>
+            </div>
+            <div id="bolso-saida" class="bolso__saida" aria-live="polite"></div>
+          </form>
+        </div>
+      </section>
+
+      <section class="secao revela" aria-labelledby="t-galeria" id="sec-galeria">
+        <div class="secao__cab"><h2 id="t-galeria">Fotos de ${esc(nome)}</h2><span class="faint">Wikipédia e Wikimedia Commons · crédito em cada foto</span></div>
+        <div id="box-galeria">${carregandoHTML('Buscando fotos livres', 1)}<div class="galeria galeria--sk" aria-hidden="true"><div class="sk"></div><div class="sk"></div><div class="sk"></div></div></div>
+      </section>
+
+      <section class="secao revela" aria-labelledby="t-videos" id="sec-videos">
+        <div class="secao__cab"><h2 id="t-videos">Veja como é</h2><a class="btn btn--fantasma btn--pequeno" href="${esc(buscaVideo)}" target="_blank" rel="noopener noreferrer">Buscar vídeos no YouTube ${icone('i-externo')}<span class="sr-only"> (abre em nova aba)</span></a></div>
+        ${videos.length ? `<div class="carrossel" data-carrossel>
+          <div class="carrossel__pista videos" tabindex="0" role="region" aria-label="Vídeos sobre ${esc(nome)} — role para o lado ou use as setas do teclado">${videos.map((v) => videoCardHTML(v)).join('')}</div>
+          <div class="carrossel__ctl"><button type="button" class="btn-icone" data-c-prev aria-label="Vídeos anteriores">${icone('i-esq')}</button><button type="button" class="btn-icone" data-c-next aria-label="Próximos vídeos">${icone('i-dir')}</button></div>
+        </div>
+        <p class="faint" style="margin-top:var(--sp-3)">Vídeos de criadores independentes, conferidos em ${esc(dataBR(dados.videos.verificadoEm))}. O player só carrega (sem cookies) quando você clica. Preços e regras citados podem estar desatualizados — confira abaixo e nos sites oficiais.</p>`
+        : `<div class="vazio">Ainda não temos vídeos conferidos para este lugar. O botão acima abre o YouTube já com a busca “${esc(nome)} o que fazer roteiro de viagem”.</div>`}
+      </section>
+
+      <section class="secao revela" aria-labelledby="t-agora">
         <h2 id="t-agora">Agora</h2>
         <div class="card" id="box-agora">${carregandoHTML('Carregando o tempo agora', 3)}</div>
       </section>
@@ -122,33 +172,63 @@ export function render(ctx) {
       return { titulo: `${nome} · Farol`, texto: [`📍 ${nome}${pais ? ` (${pais.n})` : ''}`, resumoTempo, 'Clima ao vivo, câmbio, feriados, pontos turísticos e preços estimados no Farol:'].filter(Boolean).join('\n'), url: urlCompleta(hash) };
     });
 
-    // ----- Foto (Wikipédia / Wikimedia Commons) -----
-    function mostrarFoto(src, titulo, pagina) {
-      const img = $('#hero-img'), fig = $('#hero-foto'), cred = $('#hero-cred');
-      if (!src) { fig.classList.add('is-vazio'); return; }
-      img.onload = () => img.classList.add('is-ok');
-      img.onerror = () => fig.classList.add('is-vazio');
-      img.alt = `Foto de ${titulo || nome} (Wikipédia)`;
-      img.src = src;
-      cred.hidden = false;
-      cred.innerHTML = `Foto: <a href="${esc(pagina)}" target="_blank" rel="noopener noreferrer">Wikipédia<span class="sr-only"> (abre em nova aba)</span></a>`;
+    // ----- Fotos (Wikipédia + Wikimedia Commons, com crédito) -----
+    const heroBox = $('#hero'), heroImg = $('#hero-img'), heroCred = $('#hero-cred');
+    const lqip = (() => { try { return sessionStorage.getItem('farol:thumb:' + lugar.wiki) || ''; } catch { return ''; } })();
+    if (lqip) { heroImg.src = lqip; heroImg.alt = ''; heroImg.classList.add('is-lqip', 'is-ok'); heroBox.classList.add('tem-foto'); }
+    let fotosTodas = [];
+    function heroSemFoto() { if (!heroImg.src) heroBox.classList.add('is-vazio'); }
+    function pintarHero(x) {
+      const alt = `Foto de ${nome}${x.f.descricao ? ': ' + x.f.descricao : ''}`.slice(0, 220);
+      const srcset = `${variante(x.f, 960)} 960w, ${variante(x.f, 1920)} 1920w`;
+      const pre = new Image();
+      pre.sizes = '100vw'; pre.srcset = srcset;
+      pre.onload = () => {
+        heroImg.sizes = '100vw'; heroImg.srcset = srcset; heroImg.src = variante(x.f, 1280);
+        heroImg.alt = alt; heroImg.classList.remove('is-lqip'); heroImg.classList.add('is-ok'); heroBox.classList.add('tem-foto'); heroBox.classList.remove('is-vazio');
+      };
+      pre.onerror = heroSemFoto;
+      pre.src = variante(x.f, 1280);
+      heroCred.hidden = false; heroCred.innerHTML = creditoHTML(x.f);
+    }
+    async function carregarMidia(titulo) {
+      const box = $('#box-galeria');
+      try {
+        const m = await midiaDestino(titulo, { signal });
+        if (signal.aborted) return;
+        fotosTodas = [m.hero, ...m.galeria];
+        pintarHero(m.hero);
+        const btn = $('[data-fotos]'); btn.hidden = false;
+        btn.addEventListener('click', () => abrirLightbox(fotosTodas, 0, nome, btn));
+        if (m.galeria.length) {
+          box.innerHTML = galeriaHTML(m.galeria, nome, `Fotos de ${nome}`, 1);
+          ligarGaleria(box, fotosTodas, nome, { signal });
+        } else box.innerHTML = vazioHTML('A Wikipédia tem só uma foto livre deste lugar — ela está no topo da página.');
+      } catch (e) {
+        if (e.status === -1) return;
+        heroSemFoto();
+        if (heroImg.classList.contains('is-lqip')) { heroCred.hidden = false; heroCred.innerHTML = `Foto: <a href="https://pt.wikipedia.org/wiki/${encodeURIComponent(titulo.replace(/ /g, '_'))}" target="_blank" rel="noopener noreferrer">Wikipédia<span class="sr-only"> (abre em nova aba)</span></a> (autor e licença na página do arquivo)`; }
+        box.innerHTML = e.vazio ? vazioHTML('Não encontramos fotos livres em boa qualidade para este lugar. Sem imagens genéricas: preferimos deixar vazio a mostrar algo que não seja daqui.')
+          : erroHTML(e.status === 429 ? 'O Wikimedia Commons pediu uma pausa (muitos pedidos). As fotos aparecem quando você tentar de novo.' : msgErro(e));
+        box.querySelector('[data-acao="tentar"]')?.addEventListener('click', () => carregarMidia(titulo));
+      }
     }
     if (lugar.wiki) {
-      fotosWiki([lugar.wiki], { tamanho: 1280, signal }).then((m) => {
-        if (signal.aborted) return;
-        const f = m[lugar.wiki];
-        mostrarFoto(f && f.src, nome, `https://pt.wikipedia.org/wiki/${encodeURIComponent(lugar.wiki)}`);
-      }).catch(() => $('#hero-foto').classList.add('is-vazio'));
+      if (!lqip) fotosWiki([lugar.wiki], { tamanho: 500, signal }).then((m) => { const f = m[lugar.wiki]; if (f && !signal.aborted && !heroImg.classList.contains('is-ok')) { heroImg.src = f.src; heroImg.classList.add('is-lqip', 'is-ok'); heroBox.classList.add('tem-foto'); } }).catch(() => {});
+      carregarMidia(lugar.wiki);
     }
+    ligarImagens(el);
 
     // ----- Pontos turísticos (OpenStreetMap) -----
     let grupoSel = 'todos', pontos = [];
+    const fotosPonto = {};
     function desenharPontos() {
       const box = $('#box-pontos');
       const lista = pontos.filter((p) => grupoSel === 'todos' || p.grupo === grupoSel).slice(0, 24);
       const presentes = new Set(pontos.map((p) => p.grupo));
       box.innerHTML = `<div class="filtros" role="group" aria-label="Filtrar por tipo">${GRUPOS.filter((g) => g.id === 'todos' || presentes.has(g.id)).map((g) => `<button type="button" class="chip" data-grupo="${g.id}" aria-pressed="${g.id === grupoSel}">${g.rotulo}</button>`).join('')}</div>
         ${lista.length ? `<ul class="pontos">${lista.map((p) => `<li class="card card--tight ponto">
+          ${p.wikiPt && fotosPonto[p.wikiPt] ? `<div class="ponto__foto foto"><img data-prog src="${esc(fotosPonto[p.wikiPt].src)}" alt="Foto de ${esc(p.nome)}" loading="lazy" decoding="async" width="${fotosPonto[p.wikiPt].largura}" height="${fotosPonto[p.wikiPt].altura}"><span class="ponto__cred" data-cred="${esc(fotosPonto[p.wikiPt].arquivo)}">Foto: Wikipédia</span></div>` : ''}
           <p class="card__rotulo" style="margin:0">${esc(p.tipo)} · <span class="num">${p.dist < 1 ? numero(p.dist * 1000) + ' m' : numero(p.dist, 1) + ' km'}</span></p>
           <h3>${esc(p.nome)}</h3>
           <div class="ponto__links">
@@ -158,6 +238,25 @@ export function render(ctx) {
           </div></li>`).join('')}</ul>` : vazioHTML('Nenhum ponto deste tipo no raio pesquisado.')}
         <p class="faint" style="margin-top:var(--sp-3)">${pontos.length} lugares com nome no OpenStreetMap; mostramos até 24, priorizando os que têm artigo na Wikipédia e os mais perto. Dados colaborativos: confira horários e acesso antes de ir.</p>`;
       box.querySelectorAll('[data-grupo]').forEach((b) => b.addEventListener('click', () => { grupoSel = b.dataset.grupo; desenharPontos(); $(`#box-pontos [data-grupo="${grupoSel}"]`)?.focus(); }));
+      ligarImagens(box);
+      creditarPontos(box);
+    }
+    const creditos = {};
+    async function creditarPontos(box) {
+      const els = [...box.querySelectorAll('[data-cred]')].filter((e) => e.dataset.cred);
+      const falta = els.map((e) => e.dataset.cred).filter((n) => !creditos[n]);
+      if (falta.length) { try { Object.assign(creditos, await creditosCommons(falta, { signal })); } catch {} }
+      els.forEach((e) => { const f = creditos[e.dataset.cred.replace(/_/g, ' ')]; if (f) e.innerHTML = creditoHTML(f, { curto: true }); });
+    }
+    async function fotosDosPontos() {
+      const titulos = pontos.filter((p) => p.wikiPt).slice(0, 30).map((p) => p.wikiPt.replace(/ /g, '_'));
+      if (!titulos.length) return;
+      try {
+        const m = await fotosWiki(titulos, { tamanho: 500, signal });
+        if (signal.aborted) return;
+        Object.entries(m).forEach(([k, v]) => { fotosPonto[k.replace(/_/g, ' ')] = v; });
+        desenharPontos();
+      } catch { /* sem fotos: os cartões continuam úteis */ }
     }
     async function carregarPontos() {
       const box = $('#box-pontos');
@@ -168,6 +267,7 @@ export function render(ctx) {
         pontos = organizar(r.elementos, { lat, lon }, raio);
         if (!pontos.length) { box.innerHTML = vazioHTML('O OpenStreetMap não tem pontos turísticos com nome neste raio.'); return; }
         desenharPontos();
+        fotosDosPontos();
       } catch (e) {
         if (e.status === -1) return;
         montarErro(box, e, carregarPontos);
@@ -240,6 +340,7 @@ export function render(ctx) {
         relogio = setInterval(() => { const r = el.querySelector('#relogio'); if (!r || signal.aborted) return clearInterval(relogio); r.textContent = horaLocal(); }, 30000);
         signal.addEventListener('abort', () => clearInterval(relogio), { once: true });
 
+        { const ia = $('#insp-agora'); if (ia) ia.innerHTML = `${icone(tempoIcone(c.weather_code))} ${Math.round(c.temperature_2m)}° · ${esc(tempoTexto(c.weather_code))}`; }
         const cond = condicoesProximas(p);
         resumoTempo = `Agora: ${Math.round(c.temperature_2m)} °C, ${tempoTexto(c.weather_code).toLowerCase()}. Próximos 16 dias: ${Math.round(cond.tmin)}° a ${Math.round(cond.tmax)} °C.`;
         const bons = new Set(cond.bons.map((x) => x.data));
@@ -283,6 +384,7 @@ export function render(ctx) {
         const st = estatisticaMensal(arq);
         if (!st) { box.innerHTML = vazioHTML('Sem dados históricos para este ponto.'); return; }
         const top = melhoresMeses(st);
+        { const ie = $('#insp-epoca'); if (ie) ie.textContent = `${top.map((m) => m.nome).join(', ')} (medido em ${arq.ano})`; }
         const topSet = new Set(top.map((m) => m.mes));
         const maxT = Math.max(...st.filter((m) => m.ok).map((m) => m.max));
         const minT = Math.min(...st.filter((m) => m.ok).map((m) => m.min));
@@ -382,20 +484,63 @@ export function render(ctx) {
         const w = await wikiResumo(lugar.wiki || nome, { signal });
         if (signal.aborted) return;
         const pagina = (w.content_urls && w.content_urls.desktop && w.content_urls.desktop.page) || 'https://pt.wikipedia.org';
-        if (!lugar.wiki) {
-          fotosWiki([w.title], { tamanho: 1280, signal }).then((m) => { if (!signal.aborted) { const f = m[w.title]; mostrarFoto(f && f.src, w.title, pagina); } }).catch(() => $('#hero-foto').classList.add('is-vazio'));
-        }
+        if (!lugar.wiki) carregarMidia(w.title);
+        const frase = primeiraFrase(w.extract);
+        if (frase) { const q = $('#insp-frase'); q.hidden = false; q.innerHTML = `${esc(frase)} <cite>— Wikipédia em português</cite>`; }
         box.innerHTML = `<div class="wiki">
           <div><h3>${esc(w.title)}</h3>${w.description ? `<p class="faint">${esc(w.description)}</p>` : ''}<p>${esc(w.extract || '')}</p>
           <a href="${esc((w.content_urls && w.content_urls.desktop && w.content_urls.desktop.page) || 'https://pt.wikipedia.org')}" target="_blank" rel="noopener noreferrer">Ler na Wikipédia<span class="sr-only"> (abre em nova aba)</span></a>
           <p class="faint" style="margin-top:var(--sp-2)">Texto: Wikipédia em português (CC BY-SA).</p></div></div>`;
       } catch (e) {
         if (e.status === -1) return;
-        if (!lugar.wiki) $('#hero-foto').classList.add('is-vazio');
+        if (!lugar.wiki) { heroSemFoto(); $('#box-galeria').innerHTML = vazioHTML('Sem artigo na Wikipédia em português, não há fotos livres para mostrar aqui.'); }
         if (e.vazio) { box.innerHTML = vazioHTML('A Wikipédia em português não tem um resumo para este lugar.'); return; }
         montarErro(box, e, carregarWiki);
       }
     }
+
+    // ----- Cabe no seu bolso? (só conta com os números informados) -----
+    {
+      const f = $('#form-bolso'), saida = $('#bolso-saida');
+      const salvo = lerBolso();
+      if (salvo.orcamento) { $('#b-orc').value = String(salvo.orcamento); }
+      $('#b-dias').value = salvo.dias; $('#b-pes').value = salvo.pessoas;
+      const lerCampos = () => ({ orcamento: valorBR($('#b-orc').value), dias: Math.min(30, Math.max(2, Number($('#b-dias').value) || 7)), pessoas: Math.min(9, Math.max(1, Number($('#b-pes').value) || 2)) });
+      const custoPadrao = () => {
+        const b = lerCampos();
+        const est = estimarRapido(dados, { cc: lugar.cc, dias: b.dias, pessoas: b.pessoas });
+        $('#insp-custo').textContent = lugar.cc ? `${faixa(est.economico.min, est.equilibrado.max)}` : '—';
+        const rot = $('#insp-custo').parentElement; rot.querySelector('.inspira__rot').textContent = `Custo estimado · ${b.dias} dias, ${b.pessoas} ${b.pessoas > 1 ? 'pessoas' : 'pessoa'}`;
+        return { b, est };
+      };
+      const calcular = () => {
+        const { b, est } = custoPadrao();
+        if (!b.orcamento) { saida.innerHTML = ''; return; }
+        if (!lugar.cc) { saida.innerHTML = '<p class="muted">Não identificamos o país deste ponto, então não dá para estimar o custo com segurança.</p>'; return; }
+        const v = veredito(est, b.orcamento);
+        const c = destinosQueCabem(dados, b.orcamento, b.dias, b.pessoas);
+        saida.innerHTML = `<p class="bolso__veredito bolso__veredito--${v.nivel}">${esc(v.texto)}</p>
+          <p class="faint" style="margin:var(--sp-2) 0 0">Com ${esc(reais(b.orcamento))}, ${b.dias} dias e ${b.pessoas} ${b.pessoas > 1 ? 'pessoas' : 'pessoa'}, ${c.cabem} dos ${c.total} destinos do Farol cabem na faixa mínima do estilo Econômico${c.cabem < c.total ? `. Os mais em conta: ${c.maisBarato.map((d) => `<a href="#/destino/${esc(d.slug)}">${esc(d.nome)}</a>`).join(', ')}.` : '.'} Estimativas, não cotações.</p>
+          <div class="acoes" style="margin-top:var(--sp-3)"><a class="btn btn--secundario btn--pequeno" href="#/planejar?${qPlan}">Montar roteiro com esse orçamento ${icone('i-seta')}</a></div>`;
+      };
+      f.addEventListener('submit', (ev) => { ev.preventDefault(); gravarBolso(lerCampos()); calcular(); });
+      f.addEventListener('input', () => { const b = lerCampos(); if (b.orcamento) gravarBolso(b); calcular(); });
+      calcular();
+    }
+
+    // ----- Barra de ações no celular, vídeos, revelar e paralaxe -----
+    const barra = document.createElement('div');
+    barra.className = 'barra-acoes'; barra.setAttribute('data-compartilhar', ''); barra.setAttribute('role', 'region'); barra.setAttribute('aria-label', 'Ações rápidas');
+    barra.innerHTML = `<a class="btn btn--whats" data-whats href="https://wa.me/" target="_blank" rel="noopener noreferrer">${icone('i-whats')} WhatsApp<span class="sr-only"> (abre em nova aba)</span></a>
+      <a class="btn btn--primario" href="#/planejar?${qPlan}">Planejar</a>
+      <button type="button" class="btn btn--secundario" data-rolar-barra>Reservar</button>`;
+    el.appendChild(barra);
+    ligarCompartilhar(barra, () => ({ titulo: `${nome} · Farol`, texto: [`📍 ${nome}${pais ? ` (${pais.n})` : ''}`, resumoTempo, 'Clima ao vivo, fotos, vídeos, preços estimados e pontos turísticos no Farol:'].filter(Boolean).join('\n'), url: urlCompleta(dest ? `#/destino/${dest.slug}` : location.hash) }));
+    barra.querySelector('[data-rolar-barra]').addEventListener('click', () => $('[data-rolar]').click());
+    ligarBarraAcoes(barra, $('#hero'), signal);
+    ligarVideos(el); ligarCarrossel(el, { signal });
+    ligarParalaxe($('#hero'), { signal });
+    ligarRevelar(el, { signal });
 
     carregarTempo(); carregarAno(); carregarAr(); carregarCambio(); carregarFeriados(); carregarWiki(); carregarPontos();
   };

@@ -12,8 +12,8 @@ export function hrefDestino(l) {
 
 export function cardDestaque(d, paises) {
   const p = paises[d.pais];
-  return `<a class="card card--link destaque destaque--foto" href="#/destino/${esc(d.slug)}" data-pais="${esc(d.pais)}">
-    <div class="destaque__foto"><img data-wiki="${esc(d.wiki)}" alt="" width="480" height="300" loading="lazy" decoding="async"></div>
+  return `<a class="card card--link destaque destaque--foto" href="#/destino/${esc(d.slug)}" data-pais="${esc(d.pais)}" data-vt>
+    <div class="destaque__foto foto"><img data-wiki="${esc(d.wiki)}" alt="" width="480" height="300" loading="lazy" decoding="async"></div>
     <div class="destaque__corpo">
       <span class="destaque__pais"><img src="${bandeira(d.pais)}" alt="" width="20" height="14" loading="lazy">${esc(d.local)}${p && d.local !== p.n ? ' · ' + esc(p.n) : ''}</span>
       <h3>${esc(d.nome)}</h3>
@@ -35,8 +35,17 @@ export async function carregarFotosCartoes(raiz, { signal } = {}) {
       if (!f) return;
       img.onload = () => img.classList.add('is-ok');
       img.src = f.src;
+      try { sessionStorage.setItem('farol:thumb:' + img.dataset.wiki, f.src); } catch {}
     });
   } catch { /* sem fotos: o cartão continua legível */ }
+}
+
+/** Barra fixa do celular: aparece depois que o herói sai da tela. Só em telas estreitas (CSS). */
+export function ligarBarraAcoes(barra, sentinela, signal) {
+  if (!('IntersectionObserver' in window) || !sentinela) { barra.classList.add('is-visivel'); return; }
+  const io = new IntersectionObserver(([e]) => barra.classList.toggle('is-visivel', !e.isIntersecting), { threshold: 0.02 });
+  io.observe(sentinela);
+  if (signal) signal.addEventListener('abort', () => { io.disconnect(); barra.remove(); }, { once: true });
 }
 
 export function cardNoticia(n) {

@@ -67,8 +67,25 @@ export function render(ctx) {
         <caption>Sites usados nas abas de Preços</caption>
         <thead><tr><th scope="col">Categoria</th><th scope="col">Site</th><th scope="col">Pré-preenchimento</th></tr></thead>
         <tbody>${dados.links.categorias.flatMap((c) => c.itens.map((i) => `<tr><td>${esc(c.nome)}</td><th scope="row" style="font-weight:600">${esc(i.nome)}</th><td class="muted">${i.preenche ? esc(i.preenche) : 'Não (abre a página inicial)'}</td></tr>`)).join('')}
-          <tr><td>Rotas</td><th scope="row" style="font-weight:600">${esc(dados.links.rota.nome)}</th><td class="muted">Origem e destino (por coordenadas)</td></tr></tbody>
+          <tr><td>Rotas</td><th scope="row" style="font-weight:600">${esc(dados.links.rota.nome)}</th><td class="muted">Origem e destino (por coordenadas)</td></tr>
+          ${(dados.links.extras || []).map((x) => `<tr><td>Roteiro</td><th scope="row" style="font-weight:600">${esc(x.nome)}</th><td class="muted">Busca pelo nome do lugar</td></tr>`).join('')}</tbody>
       </table></div>
+    </section>
+
+    <section class="secao" aria-labelledby="t-midia">
+      <h2 id="t-midia">Fotos, vídeos e licenças</h2>
+      <p class="muted" style="max-width:70ch">Nada de imagem genérica: toda foto vem da Wikipédia ou do Wikimedia Commons e mostra autor e licença; quando não há foto livre, o Farol mostra o espaço vazio ou um atalho de busca. Vídeos são de criadores independentes no YouTube, conferidos em ${esc(dataBR(dados.videos.verificadoEm))} (${Object.values(dados.videos.porDestino).reduce((n, l) => n + l.length, 0)} vídeos em ${Object.keys(dados.videos.porDestino).length} destinos).</p>
+      <div class="tabela-wrap"><table>
+        <caption>Como a mídia é carregada</caption>
+        <thead><tr><th scope="col">Fonte</th><th scope="col">Uso no Farol</th><th scope="col">Licença e cuidados</th></tr></thead>
+        <tbody>
+          <tr><th scope="row" style="font-weight:600">Wikipédia · media-list</th><td class="muted">Lista de fotos de cada destino (capa e galeria)</td><td class="muted">Só arquivos JPG/WebP sem restrição e com boa resolução; bandeiras, logos e mapas são ignorados</td></tr>
+          <tr><th scope="row" style="font-weight:600">Wikimedia Commons</th><td class="muted">Autor, licença e página do arquivo de cada foto</td><td class="muted">Licenças livres (CC BY, CC BY-SA, domínio público…): o crédito aparece ao lado da foto e, no Início, em “Créditos das fotos”</td></tr>
+          <tr><th scope="row" style="font-weight:600">YouTube (nocookie)</th><td class="muted">Vídeos “Veja como é”: miniatura de i.ytimg.com e player só depois do clique</td><td class="muted">Conteúdo de terceiros; preços e regras citados podem estar desatualizados. O player sem cookies só é carregado quando você toca em reproduzir</td></tr>
+          <tr><th scope="row" style="font-weight:600">OpenStreetMap (Overpass)</th><td class="muted">Lugares reais do dia a dia no roteiro</td><td class="muted">Dados colaborativos (ODbL): confira horários e acesso</td></tr>
+        </tbody>
+      </table></div>
+      <p class="faint" style="margin-top:var(--sp-3)">Cache local: listas de fotos por 7 dias e créditos por 30 dias, para pedir menos ao Wikimedia. Se o Wikimedia pedir pausa (erro 429), o Farol mostra o que já tinha e avisa.</p>
     </section>
 
     <section class="secao" aria-labelledby="t-limites">

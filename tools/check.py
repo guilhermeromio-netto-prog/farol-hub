@@ -7,7 +7,10 @@ Confere, a partir do dados.json:
   • cada API usada pelo site (status HTTP, cabeçalho CORS, formato da resposta);
   • os feeds RSS (precisam ter <item>) e o conversor rss2json;
   • cada modelo de link de busca preenchido com valores de exemplo, as páginas Civitatis
-    de cada destino, os títulos da Wikipédia e as fontes oficiais.
+    de cada destino, os títulos da Wikipédia e as fontes oficiais;
+  • mídia (rodada 3): cada vídeo curado (oEmbed do YouTube, miniatura i.ytimg.com e página de
+    incorporação youtube-nocookie) e as fotos livres de cada destino (media-list da Wikipédia +
+    autor/licença no Wikimedia Commons).
 
 Uso:
   python3 tools/check.py                      # arquivos locais + serviços externos
@@ -33,8 +36,8 @@ import urllib.request
 
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ORIGEM_SITE = 'https://guilhermeromio-netto-prog.github.io'
-UA_API = 'FarolCheck/2.0 (+https://github.com/guilhermeromio-netto-prog/farol-hub; verificador de status)'
-UA_NAV = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36 FarolCheck/2.0'
+UA_API = 'FarolCheck/3.0 (+https://github.com/guilhermeromio-netto-prog/farol-hub; verificador de status)'
+UA_NAV = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36 FarolCheck/3.0'
 SINAIS_CAPTCHA = ('captcha', 'px-captcha', 'cf-chl', 'are you a robot', 'access denied', 'perimeterx', 'datadome')
 
 OK, AVISO, FALHA = 'ok', 'aviso', 'falha'
@@ -43,7 +46,9 @@ resultados = []  # (grupo, nome, estado, detalhe)
 _trava = threading.Lock()
 _travas_host = {}
 _ultimo_host = {}
-INTERVALO_HOST = {'www.civitatis.com': 0.6, 'wikimedia.org': 1.0, 'pt.wikipedia.org': 0.3}
+INTERVALO_HOST = {'www.civitatis.com': 0.6, 'wikimedia.org': 1.0, 'pt.wikipedia.org': 0.3, 'commons.wikimedia.org': 0.6, 'www.youtube.com': 0.1}
+EXT_OK = re.compile(r'\.(jpe?g|webp)$', re.I)
+NAO_FOTO = re.compile(r'(flag|bandeira|brasao|brasão|escudo|coat[_ ]of|logo|\bmap\b|mapa|locator|location|icon|s[ií]mbolo|diagram|gr[aá]fico|climate|clima[_ ]|population|panorama_map|seal[_ ]of|signature|assinatura|stub)', re.I)
 
 
 def registrar(grupo, nome, estado, detalhe=''):
@@ -195,6 +200,27 @@ def coerencia_dados(d):
         for k in re.findall(r'\{(\w+)\}', it.get('modelo', '')):
             if k not in ex:
                 problemas.append(f'link {it.get("id")}: marcador {{{k}}} sem valor de exemplo')
+    slugs = {x['slug'] for x in d.get('destaques', [])}
+    vid = d.get('videos', {})
+    if not re.match(r'^\d{4}-\d{2}-\d{2}$', str(vid.get('verificadoEm', ''))):
+        problemas.append('videos.verificadoEm ausente ou fora do formato AAAA-MM-DD')
+    for sl, lista in vid.get('porDestino', {}).items():
+        if sl not in slugs:
+            problemas.append(f'videos: destino "{sl}" não existe nos destaques')
+        for v in lista:
+            if not re.match(r'^[\w-]{11}$', v.get('id', '')):
+                problemas.append(f'videos.{sl}: ID inválido {v.get("id")!r}')
+            if not v.get('titulo') or not v.get('canal'):
+                problemas.append(f'videos.{sl}.{v.get("id")}: sem título ou canal')
+    for t in d.get('inspiracoes', []):
+        if not t.get('slugs'):
+            problemas.append(f'inspiracoes.{t.get("id")}: sem destinos')
+        for sl in t.get('slugs', []):
+            if sl not in slugs:
+                problemas.append(f'inspiracoes.{t.get("id")}: destino "{sl}" não existe nos destaques')
+    for x in d.get('links', {}).get('extras', []):
+        if '{q}' not in x.get('modelo', '') or not x.get('modelo', '').startswith('https://'):
+            problemas.append(f'links.extras.{x.get("id")}: modelo sem https ou sem {{q}}')
     for a in d.get('apis', []):
         if not a.get('url', '').startswith('https://'):
             problemas.append(f'api {a.get("id")}: URL sem https')
@@ -203,7 +229,8 @@ def coerencia_dados(d):
             registrar(grupo, 'dados.json', FALHA, p)
     else:
         registrar(grupo, 'dados.json', OK, f'{len(d.get("destaques", []))} destaques, {len(iatas)} aeroportos, '
-                  f'{len(modelos)} modelos de link, preços de {precos.get("atualizadoEm")}')
+                  f'{len(modelos)} modelos de link, {sum(len(l) for l in vid.get("porDestino", {}).values())} vídeos, '
+                  f'{len(d.get("inspiracoes", []))} inspirações, preços de {precos.get("atualizadoEm")}')
     # idade da estimativa de preços
     try:
         idade = (dt.date.today() - dt.date.fromisoformat(precos['atualizadoEm'])).days
@@ -323,6 +350,8 @@ def checar_links(d):
             tarefas.append(('Links de busca · ' + cat['nome'], it['nome'], preencher(it['modelo'], ex), None))
     r = d['links']['rota']
     tarefas.append(('Links de busca · Rotas', r['nome'], preencher(r['modelo'], ex), None))
+    for x in d['links'].get('extras', []):
+        tarefas.append(('Links de busca · Roteiro (mídia)', x['nome'], x['modelo'].replace('{q}', urllib.parse.quote(ex.get('q', 'Torre de Belém Lisboa'), safe='')), None))
     for x in d['destaques']:
         if x.get('civitatis'):
             tarefas.append(('Civitatis por destino', x['nome'], f'https://www.civitatis.com/br/{x["civitatis"]}/', '/' + x['civitatis']))
@@ -361,6 +390,110 @@ def checar_wiki(d):
         registrar(grupo, 'fotos', AVISO, 'sem foto principal (o cartão fica sem imagem): ' + ', '.join(sem_foto))
     else:
         registrar(grupo, 'fotos', OK, 'todas têm foto principal')
+
+
+def checar_videos(d):
+    """Cada vídeo curado: oEmbed (200 = existe e pode ser incorporado), miniatura e página de incorporação."""
+    grupo = 'Vídeos (YouTube)'
+    ids = {}
+    for sl, lista in d.get('videos', {}).get('porDestino', {}).items():
+        for v in lista:
+            ids.setdefault(v['id'], sl)
+
+    def um(vid):
+        sl = ids[vid]
+        o = requisitar('https://www.youtube.com/oembed?format=json&url=' + urllib.parse.quote('https://www.youtube.com/watch?v=' + vid, safe=''), tentativas=2, ler=20_000)
+        if o['status'] == 200:
+            est, det = OK, 'oEmbed 200'
+        elif o['status'] in (401, 404, 400):
+            return (vid, sl, FALHA, f'oEmbed HTTP {o["status"]} (vídeo removido, privado ou sem incorporação)')
+        else:
+            return (vid, sl, AVISO, f'oEmbed {descrever(o)} (não verificável agora)')
+        t = requisitar(f'https://i.ytimg.com/vi/{vid}/hqdefault.jpg', ua=UA_NAV, tentativas=2, ler=1000)
+        if t['status'] != 200:
+            return (vid, sl, FALHA if t['status'] == 404 else AVISO, f'miniatura {descrever(t)}')
+        e = requisitar(f'https://www.youtube-nocookie.com/embed/{vid}', ua=UA_NAV, tentativas=1, ler=3000)
+        if e['status'] in (200, 304):
+            return (vid, sl, OK, 'oEmbed 200 · miniatura 200 · embed 200')
+        return (vid, sl, AVISO, f'embed {descrever(e)} (oEmbed e miniatura ok)')
+
+    if not ids:
+        return registrar(grupo, 'vídeos', FALHA, 'nenhum vídeo curado no dados.json')
+    with cf.ThreadPoolExecutor(6) as pool:
+        res = list(pool.map(um, ids))
+    ok = [r for r in res if r[2] == OK]
+    for vid, sl, est, det in res:
+        if est != OK:
+            registrar(grupo, f'{sl} · {vid}', est, det)
+    registrar(grupo, 'vídeos curados', OK if len(ok) == len(res) else AVISO, f'{len(ok)} de {len(res)} totalmente verificados (oEmbed + miniatura + embed)')
+
+
+def checar_midia(d):
+    """Fotos livres por destino: media-list da Wikipédia + autor/licença no Commons."""
+    grupo = 'Fotos (Wikipédia + Commons)'
+    destaques = [x for x in d['destaques'] if x.get('wiki')]
+
+    def lista(x):
+        url = 'https://pt.wikipedia.org/api/rest_v1/page/media-list/' + urllib.parse.quote(x['wiki'].replace(' ', '_'), safe='')
+        res = requisitar(url, cabecalhos={'Origin': ORIGEM_SITE, 'Accept': 'application/json'}, tentativas=2)
+        if res['status'] != 200:
+            return (x, res, [])
+        itens = json.loads(texto(res)).get('items', [])
+        nomes = []
+        for i in itens:
+            if i.get('type') != 'image' or i.get('showInGallery') is False:
+                continue
+            n = re.sub(r'^[^:]+:', '', i.get('title', '')).replace('_', ' ')
+            if EXT_OK.search(n) and not NAO_FOTO.search(n) and n not in nomes:
+                nomes.append(n)
+        return (x, res, nomes)
+
+    with cf.ThreadPoolExecutor(4) as pool:
+        listas = list(pool.map(lista, destaques))
+    limitado = [x['nome'] for x, r, _ in listas if r['status'] == 429]
+    falhas = [f'{x["nome"]} ({descrever(r)})' for x, r, _ in listas if r['status'] not in (200, 429)]
+    vazios = [x['nome'] for x, r, n in listas if r['status'] == 200 and not n]
+    if falhas:
+        registrar(grupo, 'media-list', FALHA, 'sem resposta: ' + ', '.join(falhas))
+    elif limitado:
+        registrar(grupo, 'media-list', AVISO, 'limite de requisições (429) em: ' + ', '.join(limitado))
+    else:
+        registrar(grupo, 'media-list', OK, f'{len(listas) - len(vazios)} de {len(listas)} destinos têm fotos candidatas')
+    if vazios:
+        registrar(grupo, 'destinos sem foto candidata', AVISO, 'o site mostra o aviso honesto e nenhuma imagem genérica: ' + ', '.join(vazios))
+    # autor e licença das primeiras candidatas de cada destino
+    arquivos = []
+    for _, _, n in listas:
+        arquivos += n[:4]
+    arquivos = list(dict.fromkeys(arquivos))
+    sem_licenca, qtd, bloqueio = [], 0, False
+    for i in range(0, len(arquivos), 40):
+        lote = arquivos[i:i + 40]
+        url = ('https://commons.wikimedia.org/w/api.php?action=query&prop=imageinfo&iiprop=url|size|mime|extmetadata'
+               '&iiurlwidth=1280&iiextmetadatafilter=Artist|LicenseShortName|LicenseUrl|Restrictions&format=json&formatversion=2&origin=*&titles='
+               + urllib.parse.quote('|'.join('File:' + n for n in lote), safe='|'))
+        res = requisitar(url, cabecalhos={'Origin': ORIGEM_SITE}, tentativas=3)
+        if res['status'] == 429:
+            bloqueio = True
+            break
+        if res['status'] != 200:
+            return registrar(grupo, 'Commons imageinfo', FALHA, descrever(res))
+        if not cors_ok(res):
+            return registrar(grupo, 'Commons imageinfo', FALHA, 'sem Access-Control-Allow-Origin (o navegador bloquearia)')
+        for p in json.loads(texto(res)).get('query', {}).get('pages', []):
+            ii = (p.get('imageinfo') or [None])[0]
+            if not ii:
+                continue
+            qtd += 1
+            em = ii.get('extmetadata', {})
+            if not (em.get('LicenseShortName', {}).get('value') and em.get('Artist', {}).get('value')) and not em.get('Restrictions', {}).get('value'):
+                sem_licenca.append(p.get('title', '')[5:])
+    if bloqueio:
+        registrar(grupo, 'autor e licença (Commons)', AVISO, 'limite de requisições (429); o site mostra o que estiver em cache')
+    else:
+        registrar(grupo, 'autor e licença (Commons)', OK, f'{qtd} arquivos candidatos consultados com CORS ok')
+        if sem_licenca:
+            registrar(grupo, 'fotos sem autor/licença', AVISO, f'{len(sem_licenca)} candidatas sem metadado (o site as descarta da capa e da galeria): ' + '; '.join(sem_licenca[:5]))
 
 
 def checar_github():
@@ -429,6 +562,8 @@ def main():
         checar_github()
         checar_feeds(d)
         checar_wiki(d)
+        checar_midia(d)
+        checar_videos(d)
         checar_links(d)
     return 1 if relatorio(inicio, base) else 0
 

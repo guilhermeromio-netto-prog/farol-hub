@@ -43,6 +43,7 @@ export function resumoTexto(v) {
 /** Painel completo de uma viagem. Usado em #/gastos/:id e na aba Gastos do caderno. */
 export function painelViagem(box, id, { embed = false, signal, aoApagar } = {}) {
   let moedas = null;
+  let anterior = null; // para animar só o que mudou
   const desenhar = (focoSel) => {
     const v = obterViagem(id);
     if (!v) { box.innerHTML = vazioHTML('Esta viagem não existe mais neste aparelho.'); return; }
@@ -87,7 +88,7 @@ export function painelViagem(box, id, { embed = false, signal, aoApagar } = {}) 
         ${gastos.length ? `<div class="tabela-wrap"><table>
           <caption>${gastos.length} gasto(s) · valores em reais</caption>
           <thead><tr><th scope="col">Data</th><th scope="col">Categoria</th><th scope="col">Descrição</th><th scope="col" class="num">Valor</th><th scope="col">Situação</th><th scope="col"><span class="sr-only">Apagar</span></th></tr></thead>
-          <tbody>${gastos.map((g) => `<tr>
+          <tbody>${gastos.map((g) => `<tr data-gid="${esc(g.id)}">
             <td class="num">${esc(dataBR(g.data))}</td><td>${esc(categoriaRotulo(g.categoria))}</td><td>${esc(g.descricao || '—')}</td>
             <td class="num">${reaisCentavos(g.valor)}${g.moeda && g.moeda !== 'BRL' ? `<br><span class="faint">${esc(numero(g.valorOriginal, 2))} ${esc(g.moeda)}</span>` : ''}</td>
             <td><button type="button" class="chip status-toggle" data-status="${esc(g.id)}" aria-label="Situação de ${esc(g.descricao || categoriaRotulo(g.categoria))}: ${g.status === 'pendente' ? 'pendente. Marcar como pago' : 'pago. Marcar como pendente'}">${g.status === 'pendente' ? '<span class="selo selo--aviso">Pendente</span>' : '<span class="selo selo--ok">Pago</span>'}</button></td>
@@ -206,6 +207,16 @@ export function painelViagem(box, id, { embed = false, signal, aoApagar } = {}) 
       if (aoApagar) aoApagar();
     });
 
+    {
+      const kp = [...box.querySelectorAll('.kpis .card__valor')];
+      const textos = kp.map((x) => x.textContent);
+      const ids = [...box.querySelectorAll('tbody tr[data-gid]')].map((tr) => tr.dataset.gid);
+      if (anterior) {
+        kp.forEach((x, i) => { if (anterior.textos[i] !== textos[i]) x.classList.add('pulsou'); });
+        box.querySelectorAll('tbody tr[data-gid]').forEach((tr) => { if (!anterior.ids.includes(tr.dataset.gid)) tr.classList.add('linha-nova'); });
+      }
+      anterior = { textos, ids };
+    }
     if (focoSel) { const f = box.querySelector(focoSel); if (f) { if (!f.matches('input,button,select,textarea,a')) f.setAttribute('tabindex', '-1'); f.focus(); } }
   };
   desenhar();
@@ -281,7 +292,7 @@ export function render(ctx) {
         <div class="acoes">
           <button type="button" class="btn btn--secundario" id="btn-backup">${icone('i-baixar')} Exportar backup (JSON)</button>
           <button type="button" class="btn btn--fantasma" id="btn-importar">${icone('i-subir')} Importar backup</button>
-          <input type="file" id="in-backup" accept="application/json,.json" hidden>
+          <input type="file" id="in-backup" accept="application/json,.json" aria-label="Arquivo de backup (JSON)" hidden>
           <button type="button" class="btn btn--fantasma" id="btn-csv">${icone('i-baixar')} Exportar gastos (CSV)</button>
         </div>
         <p class="faint" style="margin-top:var(--sp-2)">O backup inclui cadernos, checklist, viagens, gastos e tema. O CSV usa ponto e vírgula e abre direto no Excel ou no Planilhas Google.</p>
