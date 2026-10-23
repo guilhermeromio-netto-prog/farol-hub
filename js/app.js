@@ -10,12 +10,14 @@ import * as cadernos from './views/cadernos.js';
 import * as noticias from './views/noticias.js';
 import * as gastos from './views/gastos.js';
 import * as status from './views/status.js';
+import * as descobrir from './views/descobrir.js';
 import { lerTema, gravarTema } from './store.js';
 
 const ROTAS = [
   { re: /^\/?$/, view: inicio, nav: 'inicio' },
   { re: /^\/destino\/([^/]+)$/, view: destino, nav: 'inicio' },
   { re: /^\/planejar$/, view: planejar, nav: 'planejar' },
+  { re: /^\/descobrir\/([^/]+)$/, view: descobrir, nav: 'planejar' },
   { re: /^\/caderno\/([^/]+)$/, view: caderno, nav: 'cadernos' },
   { re: /^\/precos$/, view: precos, nav: 'precos' },
   { re: /^\/cadernos$/, view: cadernos, nav: 'cadernos' },
