@@ -99,6 +99,7 @@ export function render(ctx) {
 
         <div class="barra-envio">
           <span class="barra-envio__resumo" id="resumo" aria-hidden="true"></span>
+          <button class="btn btn--fantasma" type="button" id="btn-descobrir">Escolher lugares deslizando</button>
           <button class="btn btn--primario" type="submit">Montar o roteiro ${icone('i-seta')}</button>
         </div>
       </form>
@@ -173,6 +174,20 @@ export function render(ctx) {
     if (ctrl) ctrl.abort();
     voltarAoForm();
     toast('Geração cancelada. Seu briefing continua aqui.', 'info');
+  });
+
+  el.querySelector('#btn-descobrir').addEventListener('click', () => {
+    const brief = lerForm();
+    if (brief.destination.length < 2) {
+      erroDest.textContent = 'Para onde você quer ir? Digite ao menos 2 letras.';
+      fDest.setAttribute('aria-invalid', 'true');
+      fDest.focus();
+      return;
+    }
+    gravarBriefing(brief);
+    location.hash = brief.lat != null && brief.lon != null && !isNaN(brief.lat)
+      ? `#/descobrir/${brief.lat},${brief.lon}?nome=${encodeURIComponent(brief.destination)}`
+      : `#/descobrir/busca?nome=${encodeURIComponent(brief.destination)}`;
   });
 
   form.addEventListener('submit', async (ev) => {

@@ -181,11 +181,15 @@ export function render(ctx) {
     const d = plan.destino;
     if (!d || d.lat == null || !diasDeLugar) { par.estado = d ? 'ok' : 'sem'; preencherParadas(); return; }
     try {
-      const raio = raioPara(d.tipo);
-      const r = await pontosTuristicos(d.lat, d.lon, raio, { signal, timeout: 18000 });
-      if (signal.aborted) return;
-      const lista = organizar(r.elementos, { lat: d.lat, lon: d.lon }, raio);
-      par.lista = intercalar(lista.slice(0, diasDeLugar * 2)).slice(0, diasDeLugar);
+      if (plan.descobrir && Array.isArray(plan.descobrir.paradas) && plan.descobrir.paradas.length) {
+        par.lista = plan.descobrir.paradas; // primeiro lugar curtido de cada dia
+      } else {
+        const raio = raioPara(d.tipo);
+        const r = await pontosTuristicos(d.lat, d.lon, raio, { signal, timeout: 18000 });
+        if (signal.aborted) return;
+        const lista = organizar(r.elementos, { lat: d.lat, lon: d.lon }, raio);
+        par.lista = intercalar(lista.slice(0, diasDeLugar * 2)).slice(0, diasDeLugar);
+      }
       par.estado = 'ok';
       preencherParadas();
       const titulos = par.lista.filter((p) => p.wikiPt).map((p) => p.wikiPt.replace(/ /g, '_'));

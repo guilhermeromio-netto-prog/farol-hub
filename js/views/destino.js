@@ -59,6 +59,7 @@ export function render(ctx) {
         ${lugar.resumo ? `<p class="hero-full__resumo">${esc(lugar.resumo)}</p>` : ''}
         <div class="acoes hero-full__acoes">
           <a class="btn btn--primario" href="#/planejar?${qPlan}">Planejar viagem para cá</a>
+          <a class="btn btn--vidro" href="#/descobrir/${lugar.slug ? lugar.slug : `${lugar.lat},${lugar.lon}?nome=${encodeURIComponent(nome)}`}">Descobrir lugares</a>
           <button type="button" class="btn btn--vidro" data-rolar>Ver preços</button>
           <button type="button" class="btn btn--vidro" data-fotos hidden>${icone('i-foto')} Ver fotos</button>
         </div>
@@ -129,6 +130,7 @@ export function render(ctx) {
 
       <section class="secao" aria-labelledby="t-pontos">
         <div class="secao__cab"><h2 id="t-pontos">O que ver por perto</h2><span class="faint">Fonte: OpenStreetMap (colaborativo) · raio de ${numero(raio / 1000, 1)} km</span></div>
+        <p style="margin:0 0 var(--sp-3)"><a class="btn btn--secundario btn--pequeno" href="#/descobrir/${lugar.slug ? lugar.slug : `${lugar.lat},${lugar.lon}?nome=${encodeURIComponent(nome)}`}">Curtir lugares e montar o roteiro ${icone('i-seta')}</a></p>
         <div id="box-pontos">${carregandoHTML('Buscando pontos turísticos no OpenStreetMap', 3)}</div>
       </section>
 
