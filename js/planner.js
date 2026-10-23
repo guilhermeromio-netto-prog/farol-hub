@@ -41,7 +41,7 @@ function haversine(a, b) {
   return 2 * R * Math.asin(Math.sqrt(h));
 }
 
-async function resolverLugar(texto, dados, { signal, preferirBR = false } = {}) {
+export async function resolverLugar(texto, dados, { signal, preferirBR = false } = {}) {
   const t = norm(texto);
   const palavra = (txt, termo) => new RegExp(`(^|[^a-z0-9])${termo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}($|[^a-z0-9])`).test(txt);
   const dest = dados.destaques.find((d) => { const n = norm(d.nome); return n === t || palavra(t, n) || (t.length >= 5 && palavra(n, t)); });

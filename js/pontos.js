@@ -54,7 +54,7 @@ export function organizar(elementos, centro, raio) {
     const dist = distanciaKm(centro, { lat, lon });
     const wp = typeof t.wikipedia === 'string' && t.wikipedia.startsWith('pt:') ? t.wikipedia.slice(3) : '';
     const score = (wp ? 3 : t.wikipedia ? 1.5 : 0) + (t.wikidata ? 1 : 0) + (t.tourism === 'attraction' || t.tourism === 'museum' ? 0.5 : 0) - (dist * 1000) / raio;
-    lista.push({ id: `${e.type}/${e.id}`, nome, tipo, grupo, lat, lon, dist, wikiPt: wp, score });
+    lista.push({ id: `${e.type}/${e.id}`, nome, tipo, grupo, lat, lon, dist, wikiPt: wp, horario: typeof t.opening_hours === 'string' ? t.opening_hours.slice(0, 120) : '', score });
   });
   return lista.sort((a, b) => b.score - a.score);
 }
